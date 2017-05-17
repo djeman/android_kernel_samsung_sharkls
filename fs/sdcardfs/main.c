@@ -34,7 +34,7 @@ enum {
 	Opt_lower_fs,
 	Opt_reserved_mb,
 	Opt_mask,
-	Opt_multi_user,
+	Opt_multiuser,
 	Opt_label,
 	Opt_type,
 	Opt_err,
@@ -49,7 +49,7 @@ static const match_table_t sdcardfs_tokens = {
 	{Opt_lower_fs, "lower_fs=%s"},
 	{Opt_reserved_mb, "reserved_mb=%u"},
 	{Opt_mask, "mask=%o"},
-	{Opt_multi_user, "multi_user"},
+	{Opt_multiuser, "multiuser"},
 	{Opt_label, "label=%s"},
 	{Opt_type, "type=%s"},
 	{Opt_err, NULL}
@@ -141,7 +141,7 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 				goto invalid_option;
 			opts->mask = option;
 			break;
-		case Opt_multi_user:
+		case Opt_multiuser:
 			opts->multi_user = true;
 			break;
 		case Opt_label:
