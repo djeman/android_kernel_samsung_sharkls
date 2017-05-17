@@ -26,8 +26,8 @@
 #include "../internal.h"
 
 enum {
-	Opt_low_uid,
-	Opt_low_gid,
+	Opt_fsuid,
+	Opt_fsgid,
 	Opt_gid,
 	Opt_userid,
 	Opt_debug,
@@ -41,8 +41,8 @@ enum {
 };
 
 static const match_table_t sdcardfs_tokens = {
-	{Opt_low_uid, "low_uid=%u"},
-	{Opt_low_gid, "low_gid=%u"},
+	{Opt_fsuid, "fsuid=%u"},
+	{Opt_fsgid, "fsgid=%u"},
 	{Opt_gid, "gid=%u"},
 	{Opt_userid, "userid=%u"},
 	{Opt_debug, "debug"},
@@ -97,12 +97,12 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 		case Opt_debug:
 			*debug = 1;
 			break;
-		case Opt_low_uid:
+		case Opt_fsuid:
 			if (match_int(&args[0], &option))
 				return 0;
 			opts->fs_low_uid = option;
 			break;
-		case Opt_low_gid:
+		case Opt_fsgid:
 			if (match_int(&args[0], &option))
 				return 0;
 			opts->fs_low_gid = option;
