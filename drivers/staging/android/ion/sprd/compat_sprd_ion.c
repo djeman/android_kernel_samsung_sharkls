@@ -44,6 +44,12 @@ struct compat_ion_mmu_data {
 	compat_size_t iova_size;
 };
 
+struct compat_ion_kmap_data {
+	compat_int_t fd_buffer;
+	compat_u64 kaddr;
+	compat_size_t size;
+};
+
 static int compat_get_ion_phys_data(
 			struct compat_ion_phys_data __user *data32,
 			struct ion_phys_data __user *data)
@@ -132,6 +138,44 @@ static int compat_put_ion_mmu_data(
 	err |= put_user(ul, &data32->iova_addr);
 	err |= get_user(s, &data->iova_size);
 	err |= put_user(s, &data32->iova_size);
+
+	return err;
+};
+
+static int compat_get_ion_kmap_data(
+			struct compat_ion_kmap_data __user *data32,
+			struct ion_kmap_data __user *data)
+{
+	compat_int_t i;
+	compat_u64 u64;
+	compat_size_t s;
+	int err;
+
+	err = get_user(i, &data32->fd_buffer);
+	err |= put_user(i, &data->fd_buffer);
+	err |= get_user(u64, &data32->kaddr);
+	err |= put_user(u64, &data->kaddr);
+	err |= get_user(s, &data32->size);
+	err |= put_user(s, &data->size);
+
+	return err;
+};
+
+static int compat_put_ion_kmap_data(
+			struct compat_ion_kmap_data __user *data32,
+			struct ion_kmap_data __user *data)
+{
+	compat_int_t i;
+	compat_u64 u64;
+	compat_size_t s;
+	int err;
+
+	err |= get_user(i, &data->fd_buffer);
+	err |= put_user(i, &data32->fd_buffer);
+	err |= get_user(u64, &data->kaddr);
+	err |= put_user(u64, &data32->kaddr);
+	err |= get_user(s, &data->size);
+	err |= put_user(s, &data32->size);
 
 	return err;
 };
@@ -265,7 +309,7 @@ long compat_sprd_ion_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 		}
 
 		break;
-    }
+	}
 	case ION_SPRD_CUSTOM_FENCE_SIGNAL:
 	{
 		struct ion_fence_data data;
@@ -282,7 +326,49 @@ long compat_sprd_ion_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 	case ION_SPRD_CUSTOM_FENCE_DUP:
 	{
 		break;
+	}
+	case ION_SPRD_CUSTOM_MAP_KERNEL:
+	{
+		struct compat_ion_kmap_data __user *data32;
+		struct ion_kmap_data __user *data;
+		int err;
 
+		data32 = compat_ptr(arg);
+		data = compat_alloc_user_space(sizeof(*data));
+		if (data == NULL)
+			return -EFAULT;
+ 
+		err = compat_get_ion_kmap_data(data32, data);
+		if (err)
+			return err;
+#if 0
+		ret = dev->custom_ioctl(client, ION_SPRD_CUSTOM_MAP_KERNEL,
+						(unsigned long)data);
+#else
+		ret = sprd_ion_ioctl(filp, ION_SPRD_CUSTOM_MAP_KERNEL, (unsigned long)data);
+#endif
+		err = compat_put_ion_kmap_data(data32, data);
+		return ret ? ret : err;
+	}
+	case ION_SPRD_CUSTOM_UNMAP_KERNEL:
+	{
+#if 0
+		ret = dev->custom_ioctl(client, ION_SPRD_CUSTOM_UNMAP_KERNEL,
+						(unsigned long)data);
+#else
+		ret = sprd_ion_ioctl(filp, ION_SPRD_CUSTOM_UNMAP_KERNEL, arg);
+#endif
+		return ret;
+	}
+	case ION_SPRD_CUSTOM_INVALIDATE:
+	{
+#if 0
+		ret = dev->custom_ioctl(client, ION_SPRD_CUSTOM_UNMAP_KERNEL,
+						(unsigned long)data);
+#else
+		ret = sprd_ion_ioctl(filp, ION_SPRD_CUSTOM_INVALIDATE, arg);
+#endif
+		return ret;
 	}
 	default:
 		return -ENOIOCTLCMD;

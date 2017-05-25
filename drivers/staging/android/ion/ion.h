@@ -201,6 +201,10 @@ int ion_share_dma_buf_fd(struct ion_client *client, struct ion_handle *handle);
  */
 struct ion_handle *ion_import_dma_buf(struct ion_client *client, int fd);
 
+#if defined(CONFIG_SPRD_IOMMU)
+int ion_debug_heap_show_iova(struct ion_heap *heap, int iommu_id);
+#endif
+
 #ifdef CONFIG_E_SHOW_MEM
 int ion_debug_heap_show_printk(struct ion_heap *heap, enum e_show_mem_type type);
 #endif

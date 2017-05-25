@@ -437,7 +437,8 @@ static int GSP_Map(gsp_context_t *gspCtx)
     if(gspCtx->gsp_cfg.layer0_info.src_addr.addr_y == 0
        &&gspCtx->gsp_cfg.layer0_info.mem_info.share_fd) {
         data.fd_buffer = gspCtx->gsp_cfg.layer0_info.mem_info.share_fd;
-        if(sprd_ion_get_gsp_addr(&data)) {
+        data.is_need_iova = false;
+        if(sprd_ion_get_addr(ION_GSP, &data)) {
             printk("%s, L%d, error!\n",__func__,__LINE__);
             return -1;
         }
@@ -452,7 +453,8 @@ static int GSP_Map(gsp_context_t *gspCtx)
     if(gspCtx->gsp_cfg.layer1_info.src_addr.addr_y == 0
        &&gspCtx->gsp_cfg.layer1_info.mem_info.share_fd) {
         data.fd_buffer = gspCtx->gsp_cfg.layer1_info.mem_info.share_fd;
-        if(sprd_ion_get_gsp_addr(&data)) {
+        data.is_need_iova = false;
+        if(sprd_ion_get_addr(ION_GSP, &data)) {
             printk("%s, L%d, error!\n",__func__,__LINE__);
             return -1;
         }
@@ -468,7 +470,8 @@ static int GSP_Map(gsp_context_t *gspCtx)
     if(gspCtx->gsp_cfg.layer_des_info.src_addr.addr_y == 0
        &&gspCtx->gsp_cfg.layer_des_info.mem_info.share_fd) {
         data.fd_buffer = gspCtx->gsp_cfg.layer_des_info.mem_info.share_fd;
-        if(sprd_ion_get_gsp_addr(&data)) {
+        data.is_need_iova = false;
+        if(sprd_ion_get_addr(ION_GSP, &data)) {
             printk("%s, L%d, error!\n",__func__,__LINE__);
             return -1;
         }
@@ -486,14 +489,24 @@ static int GSP_Map(gsp_context_t *gspCtx)
 
 static int GSP_Unmap(gsp_context_t *gspCtx)
 {
-    if(gspCtx->gsp_cfg.layer0_info.mem_info.share_fd)
-        sprd_ion_free_gsp_addr(gspCtx->gsp_cfg.layer0_info.mem_info.share_fd);
+    struct ion_addr_data data;
+    if(gspCtx->gsp_cfg.layer0_info.mem_info.share_fd) {
+        data.fd_buffer = gspCtx->gsp_cfg.layer0_info.mem_info.share_fd;
+        data.is_need_iova = false;
+        sprd_ion_free_addr(ION_GSP, &data);
+    }
 
-    if(gspCtx->gsp_cfg.layer1_info.mem_info.share_fd)
-        sprd_ion_free_gsp_addr(gspCtx->gsp_cfg.layer1_info.mem_info.share_fd);
+    if(gspCtx->gsp_cfg.layer1_info.mem_info.share_fd) {
+        data.fd_buffer = gspCtx->gsp_cfg.layer1_info.mem_info.share_fd;
+        data.is_need_iova = false;
+        sprd_ion_free_addr(ION_GSP, &data);
+    }
 
-    if(gspCtx->gsp_cfg.layer_des_info.mem_info.share_fd)
-        sprd_ion_free_gsp_addr(gspCtx->gsp_cfg.layer_des_info.mem_info.share_fd);
+    if(gspCtx->gsp_cfg.layer_des_info.mem_info.share_fd) {
+        data.fd_buffer = gspCtx->gsp_cfg.layer_des_info.mem_info.share_fd;
+        data.is_need_iova = false;
+        sprd_ion_free_addr(ION_GSP, &data);
+    }
 
     return 0;
 }
@@ -649,9 +662,6 @@ static GSP_CAPABILITY_T* GSP_Config_Capability(void)
 			s_gsp_capability.buf_type_support=GSP_ADDR_TYPE_IOVIRTUAL;
 		#else
 			s_gsp_capability.buf_type_support=GSP_Get_Addr_Type();
-		#endif
-		#ifdef CONFIG_GSP_THREE_OVERLAY
-			s_gsp_capability.max_layer_cnt = 3;
 		#endif
         s_gsp_capability.yuv_xywh_even = 1;
         s_gsp_capability.crop_min.w=s_gsp_capability.crop_min.h=4;
@@ -923,9 +933,6 @@ static void gsp_early_suspend(struct early_suspend* es)
     printk("%s%d\n",__func__,__LINE__);
 
     gspCtx = container_of(es, gsp_context_t, earlysuspend);
-    if (NULL == gspCtx) {
-        return;
-    }
 
     gspCtx->suspend_resume_flag = 1;
 
@@ -948,9 +955,6 @@ static void gsp_late_resume(struct early_suspend* es)
     printk("%s%d\n",__func__,__LINE__);
 
     gspCtx = container_of(es, gsp_context_t, earlysuspend);
-    if (NULL == gspCtx) {
-        return;
-    }
 
     gspCtx->gsp_coef_force_calc = 1;
     //GSP_module_enable(gspCtx);//
@@ -1096,6 +1100,7 @@ int32_t gsp_drv_probe(struct platform_device *pdev)
     if (NULL == gspCtx) {
         dev_err(&pdev->dev, "Can't alloc memory for module data.\n");
         ret = -ENOMEM;
+        goto ERROR_EXIT2;
     }
 
     GSP_TRACE("gsp_probe enter .\n");
@@ -1108,7 +1113,7 @@ int32_t gsp_drv_probe(struct platform_device *pdev)
 
     if(0 != of_address_to_resource(s_gsp_of_dev->of_node, 0, &r)) {
         printk(KERN_ERR "gsp probe fail. (can't get register base address)\n");
-        goto exit;
+        goto ERROR_EXIT2;
     }
     g_gsp_base_addr = (unsigned long)ioremap_nocache(r.start, resource_size(&r));
     if(!g_gsp_base_addr)
@@ -1120,7 +1125,7 @@ int32_t gsp_drv_probe(struct platform_device *pdev)
 
     if(0 != ret) {
         printk("%s: read gsp_mmu_ctrl_addr fail (%d)\n", __func__, ret);
-        return ret;
+        goto ERROR_EXIT2;
     }
     g_gsp_mmu_ctrl_addr = (ulong)ioremap_nocache(g_gsp_mmu_ctrl_addr,sizeof(uint32_t));
     if(!g_gsp_mmu_ctrl_addr)
@@ -1137,7 +1142,7 @@ int32_t gsp_drv_probe(struct platform_device *pdev)
     ret = gsp_clock_init(gspCtx);
     if (ret) {
         printk(KERN_ERR "gsp emc clock init failed. \n");
-        goto exit;
+        goto ERROR_EXIT2;
     }
     //GSP_module_enable(gspCtx);
 
@@ -1147,7 +1152,7 @@ int32_t gsp_drv_probe(struct platform_device *pdev)
     ret = misc_register(&gspCtx->dev);
     if (ret) {
         printk(KERN_ERR "gsp cannot register miscdev (%d)\n", ret);
-        goto exit;
+        goto ERROR_EXIT2;
     }
 
     ret = request_irq(gspCtx->gsp_irq_num,//
@@ -1158,7 +1163,7 @@ int32_t gsp_drv_probe(struct platform_device *pdev)
 
     if (ret) {
         printk("could not request irq %d\n", gspCtx->gsp_irq_num);
-        goto exit1;
+        goto ERROR_EXIT1;
     }
 
     gspCtx->gsp_cur_client_pid = INVALID_USER_ID;
@@ -1188,9 +1193,12 @@ int32_t gsp_drv_probe(struct platform_device *pdev)
     g_gspCtx = gspCtx;
     return ret;
 
-exit1:
+ERROR_EXIT1:
     misc_deregister(&gspCtx->dev);
-exit:
+ERROR_EXIT2:
+    if (gspCtx) {
+        kfree(gspCtx);
+    }
     return ret;
 }
 
@@ -1205,6 +1213,7 @@ static int32_t gsp_drv_remove(struct platform_device *dev)
     }
     free_irq(gspCtx->gsp_irq_num, gsp_irq_handler);
     misc_deregister(&gspCtx->dev);
+    kfree(gspCtx);
     return 0;
 }
 

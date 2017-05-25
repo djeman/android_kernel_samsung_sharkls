@@ -295,7 +295,7 @@ static int ion_system_heap_debug_show(struct ion_heap *heap, struct seq_file *s,
 						heap);
 	int i;
 	unsigned long *pool_used = (unsigned long *)unused;
-#ifdef CONFIG_E_SHOW_MEM
+
 	for (i = 0; i < num_orders; i++) {
 		struct ion_page_pool *pool = sys_heap->uncached_pools[i];
 		if (s) {
@@ -357,31 +357,6 @@ static int ion_system_heap_debug_show(struct ion_heap *heap, struct seq_file *s,
 			}
 		}
 	}
-#else
-	for (i = 0; i < num_orders; i++) {
-		struct ion_page_pool *pool = sys_heap->uncached_pools[i];
-		seq_printf(s,
-			"%3d order %u highmem pages in uncached pool = %12lu total\n",
-			pool->high_count, pool->order,
-			(1 << pool->order) * PAGE_SIZE * pool->high_count);
-		seq_printf(s,
-			"%3d order %u  lowmem pages in uncached pool = %12lu total\n",
-			pool->low_count, pool->order,
-			(1 << pool->order) * PAGE_SIZE * pool->low_count);
-	}
-
-	for (i = 0; i < num_orders; i++) {
-		struct ion_page_pool *pool = sys_heap->cached_pools[i];
-		seq_printf(s,
-			"%3d order %u highmem pages in   cached pool = %12lu total\n",
-			pool->high_count, pool->order,
-			(1 << pool->order) * PAGE_SIZE * pool->high_count);
-		seq_printf(s,
-			"%3d order %u  lowmem pages in   cached pool = %12lu total\n",
-			pool->low_count, pool->order,
-			(1 << pool->order) * PAGE_SIZE * pool->low_count);
-	}
-#endif
 	return 0;
 }
 

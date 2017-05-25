@@ -1545,6 +1545,113 @@ static int ion_debug_heap_show(struct seq_file *s, void *unused)
 	return 0;
 }
 
+#if defined(CONFIG_SPRD_IOMMU)
+int ion_debug_heap_show_iova(struct ion_heap *heap, int iommu_id)
+{
+	struct ion_device *dev = heap->dev;
+	struct rb_node *n;
+	struct rb_node *r;
+	struct tm t;
+	size_t total_size = 0;
+	size_t total_orphaned_size = 0;
+	unsigned long pool_used = 0;
+
+	printk("Heap: %s\n", heap->name);
+	printk("%16.s %6.s %6.s %10.s %10.s %16.s\n",
+		"client", "pid", "tid", "size", "iova", "alloc_time");
+	printk("----------------------------------------------------------\n");
+
+	for (n = rb_first(&dev->clients); n; n = rb_next(n)) {
+		struct ion_client *client = rb_entry(n, struct ion_client,
+						node);
+
+		mutex_lock(&client->lock);
+		for (r = rb_first(&client->handles);
+			r; r = rb_next(r)) {
+			struct ion_handle *handle =
+				rb_entry(r, struct ion_handle, node);
+			struct ion_buffer *buffer = handle->buffer;
+
+			if (buffer->heap->id == heap->id) {
+				if (!buffer->size)
+					continue;
+				time_to_tm(buffer->alloc_time.tv_sec, 0, &t);
+				if (client->task) {
+					char task_comm[TASK_COMM_LEN];
+
+					get_task_comm(task_comm, client->task);
+					printk("%16.s %6u %6u %10zu 0x%8lx %ld.\
+%d.%d-%d:%d:%d.%ld\n",
+						task_comm, client->pid, client->tid,
+						buffer->size, buffer->iova[iommu_id],
+						t.tm_year + 1900, t.tm_mon + 1,
+						t.tm_mday, t.tm_hour, t.tm_min,
+						t.tm_sec,
+						buffer->alloc_time.tv_usec);
+				} else {
+					printk("%16.s %6u %6u %10zu 0x%8lx %ld.\
+%d.%d-%d:%d:%d.%ld\n",
+						client->name, client->pid, client->tid,
+						buffer->size, buffer->iova[iommu_id],
+						t.tm_year + 1900, t.tm_mon + 1,
+						t.tm_mday, t.tm_hour, t.tm_min,
+						t.tm_sec,
+						buffer->alloc_time.tv_usec);
+				}
+			}
+		}
+		mutex_unlock(&client->lock);
+	}
+	printk("----------------------------------------------------------\n");
+	printk("orphaned allocations (info is from last known client):\n");
+
+	mutex_lock(&dev->buffer_lock);
+	for (n = rb_first(&dev->buffers); n; n = rb_next(n)) {
+		struct ion_buffer *buffer = rb_entry(n, struct ion_buffer,
+						node);
+		if (buffer->heap->id != heap->id)
+			continue;
+		total_size += buffer->size;
+		if (!buffer->handle_count) {
+			time_to_tm(buffer->alloc_time.tv_sec, 0, &t);
+			printk("%16.s %6u %6u %10zu 0x%8lx %d %d %ld.\
+%d.%d-%d:%d:%d.%ld\n",
+				buffer->task_comm, buffer->pid, buffer->tid,
+				buffer->size, buffer->iova[iommu_id],
+				buffer->kmap_cnt,
+				atomic_read(&buffer->ref.refcount),
+				t.tm_year + 1900, t.tm_mon + 1,
+				t.tm_mday, t.tm_hour, t.tm_min,
+				t.tm_sec,
+				buffer->alloc_time.tv_usec);
+			total_orphaned_size += buffer->size;
+		}
+	}
+	mutex_unlock(&dev->buffer_lock);
+
+	printk("----------------------------------------------------------\n");
+	printk("%16.s %22zu\n", "total orphaned", total_orphaned_size);
+	printk("%16.s %22zu\n", "total ", total_size);
+	if (heap->flags & ION_HEAP_FLAG_DEFER_FREE)
+		printk("%16.s %22zu\n", "deferred free", heap->free_list_size);
+	printk("----------------------------------------------------------\n");
+
+	if (heap->debug_show) {
+		/* just get pool used */
+		heap->debug_show(heap, 0, (void *)(&pool_used));
+		/* printk detail infos */
+		heap->debug_show(heap, 0, 0);
+	}
+	printk("%16.s %22zu\n", "total pooled", pool_used);
+	printk("----------------------------------------------------------\n");
+	printk("Total used: %lu kB\n",
+		(unsigned long)(total_size + pool_used) / 1024);
+	printk("----------------------------------------------------------\n");
+	printk("\n");
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_E_SHOW_MEM
 int ion_debug_heap_show_printk(struct ion_heap *heap, enum e_show_mem_type type)
 {

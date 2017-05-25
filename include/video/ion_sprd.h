@@ -53,6 +53,9 @@ enum ION_SPRD_CUSTOM_CMD {
 	/*for new MemoryHeapIon*/
 	ION_SPRD_CUSTOM_MAP,
 	ION_SPRD_CUSTOM_UNMAP,
+	ION_SPRD_CUSTOM_MAP_KERNEL,
+	ION_SPRD_CUSTOM_UNMAP_KERNEL,
+	ION_SPRD_CUSTOM_INVALIDATE,
 };
 
 enum SPRD_DEVICE_SYNC_TYPE {
@@ -79,6 +82,8 @@ struct ion_addr_data {
 	unsigned long iova_addr;
 	unsigned long phys_addr;
 	size_t size;
+	struct dma_buf *dmabuf;
+	bool is_need_iova;
 };
 
 struct ion_msync_data {
@@ -88,12 +93,13 @@ struct ion_msync_data {
 	size_t size;
 };
 
-struct ion_map_data {
+struct ion_kmap_data {
 	int fd_buffer;
-	unsigned long dev_addr;
+	uint64_t kaddr;
+	size_t size;
 };
 
-struct ion_unmap_data {
+struct ion_kunmap_data {
 	int fd_buffer;
 };
 
@@ -104,9 +110,11 @@ struct ion_fence_data {
 	int retired_fence_fd;
 };
 
-int sprd_ion_get_gsp_addr(struct ion_addr_data *data);
+struct ion_client *sprd_ion_client_create(const char *name);
 
-int sprd_ion_free_gsp_addr(int fd);
+int sprd_ion_get_addr(int master_id, struct ion_addr_data *data);
+
+int sprd_ion_free_addr(int master_id, struct ion_addr_data *data);
 
 long sprd_ion_ioctl(struct file *filp, unsigned int cmd,
 				unsigned long arg);
