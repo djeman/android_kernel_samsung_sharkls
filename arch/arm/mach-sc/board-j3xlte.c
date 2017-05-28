@@ -90,10 +90,6 @@
 #include <linux/headset_sprd_sc2723.h>
 #endif
 
-#ifdef CONFIG_PROC_AVC
-#include <linux/proc_avc.h>
-#endif
-
 extern void bluesleep_setup_uart_port(struct platform_device *uart_dev);
 extern void __init sci_reserve(void);
 extern void __init sci_map_io(void);
@@ -282,9 +278,6 @@ static void __init sc8830_init_machine(void)
 {
 	printk("sci get chip id = 0x%x\n", __sci_get_chip_id());
 
-#ifdef CONFIG_PROC_AVC
-	sec_avc_log_init();
-#endif
 	sci_adc_init();
 #ifndef CONFIG_MACH_SPX35LFPGA
 	sci_regulator_init();
