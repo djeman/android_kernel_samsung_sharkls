@@ -315,11 +315,16 @@ static int get_regu_offset(struct regulator_dev *rdev, int des_uV)
 	struct sci_regulator_desc *desc = __get_desc(rdev);
 	struct sci_regulator_regs *regs = &desc->regs;
 	int delta = 0;
+	int coef = 0;
 
 	if ((desc->regs.typ & BIT(4))){
 		delta = regs->otp_delta *(int)regs->step_uV;
 	}else{
-		delta = (des_uV/1000) * regs->otp_delta / ((int)regs->vol_def/1000);
+		coef = ((int)regs->vol_def/1000);
+		if (coef == 0)
+			delta = (des_uV/1000) * regs->otp_delta;
+		else
+			delta = (des_uV/1000) * regs->otp_delta / coef;
 		delta *=(int)regs->step_uV;
 	}
 
