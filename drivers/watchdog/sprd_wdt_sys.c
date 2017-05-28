@@ -51,8 +51,8 @@
 #define KERNEL_WATCHDOG_FEEDER 1
 
 static int feed_period = 3; /* (secs) Default is 3 sec */
-static int ca7_irq_margin = 9; /* (secs) Default is 9 sec */
-static int ca7_margin = 10; /* (secs) Default is 10 sec */
+static int apcore_irq_margin = 9; /* (secs) Default is 9 sec */
+static int apcore_margin = 10; /* (secs) Default is 10 sec */
 static int ap_margin = 12; /* (secs) Default is 12 sec */
 #if KERNEL_ONLY_CHIP_DOG
 static int chip_margin = 8; /* (secs) Default is 8 sec */
@@ -61,20 +61,15 @@ static int chip_margin = 15; /* (secs) Default is 15 sec */
 #endif
 static unsigned long wdt_enabled;
 
-#define wdt_feed_all() FEED_ALL_WDG(chip_margin, ap_margin, ca7_margin, ca7_irq_margin)
+#define wdt_feed_all() FEED_ALL_WDG(chip_margin, ap_margin, apcore_margin, apcore_irq_margin)
 
 extern int in_calibration(void);
-
-#ifdef CONFIG_SEC_DEBUG
-#include <soc/sprd/sec_debug.h>
-#endif
-
 #ifndef CONFIG_SPRD_WATCHDOG_SYS_FIQ
-static irqreturn_t ca7_wdg_isr(int irq, void *dev_id)
+static irqreturn_t sprd_wdg_isr(int irq, void *dev_id)
 {
 	pr_debug("%s\n", __func__);
 	pr_info("watchdog timeout interrupt happen\n");
-	sci_glb_set(AP_WDG_INT_CLR, WDG_INT_CLEAR_BIT);
+	sci_glb_set(APCORE_WDG_INT_CLR, WDG_INT_CLEAR_BIT);
 	handle_sysrq('m');
 	handle_sysrq('w');
 	pr_info("Current PID %d is %s\n", task_pid_nr(current), current->comm);
@@ -82,7 +77,7 @@ static irqreturn_t ca7_wdg_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 #else
-static void ca7_wdg_fiq(struct fiq_glue_handler *h, void *regs, void *svc_sp)
+static void sprd_wdg_fiq(struct fiq_glue_handler *h, void *regs, void *svc_sp)
 {
 	flush_cache_all();
 	outer_disable(); /* l2x0_disable */
@@ -90,10 +85,10 @@ static void ca7_wdg_fiq(struct fiq_glue_handler *h, void *regs, void *svc_sp)
 	mdelay(50); /* wait for other application processor finish printk */
 	arch_trigger_all_cpu_backtrace();
 	panic("Hardware Watchdog interrupt barks on <cpu%d>\n", smp_processor_id());
-	__raw_writel(WDG_INT_CLEAR_BIT, CA7_WDG_INT_CLR);
+	__raw_writel(WDG_INT_CLEAR_BIT, APCORE_WDG_INT_CLR);
 }
-static struct fiq_glue_handler ca7_wdg_fiq_glue_handler = {
-	.fiq = ca7_wdg_fiq,
+static struct fiq_glue_handler sprd_wdg_fiq_glue_handler = {
+	.fiq = sprd_wdg_fiq,
 };
 #endif
 
@@ -105,7 +100,7 @@ static void sprd_wdt_resume(void)
 	if (!wdt_enabled)
 		return;
 	wdt_feed_all();
-	ENABLE_ALL_WDG();
+	enable_all_wdt();
 	return;
 }
 
@@ -114,7 +109,7 @@ static int sprd_wdt_suspend(void)
 	pr_debug("%s\n", __FUNCTION__);
 	if (!wdt_enabled)
 		return 0;
-	DISABLE_ALL_WDG();
+	disable_all_wdt();
 	return 0;
 }
 
@@ -179,8 +174,8 @@ static int watchdog_feeder(void *data)
 	do {
 		if (kthread_should_stop())
 			break;
-		pr_debug("%s, ca7_margin=%d, ap_margain=%d, chip_margin=%d, feed_period=%d, wdt_enabled=%ld\n",
-			__FUNCTION__, ca7_margin, ap_margin, chip_margin, feed_period, wdt_enabled);
+		pr_debug("%s, apcore_margin=%d, ap_margain=%d, chip_margin=%d, feed_period=%d, wdt_enabled=%ld\n",
+			__FUNCTION__, apcore_margin, ap_margin, chip_margin, feed_period, wdt_enabled);
 		if (wdt_enabled & (1 << KERNEL_WATCHDOG_FEEDER_BIT))
 			wdt_feed_all();
 		set_current_state(TASK_INTERRUPTIBLE);
@@ -195,19 +190,16 @@ static void wdt_start(void)
 {
 	if (wdt_enabled) {
 		pr_info("watchdog enable\n");
-		watchdog_start(chip_margin, ap_margin, ca7_margin, ca7_irq_margin);
+		watchdog_start(chip_margin, ap_margin, apcore_margin, apcore_irq_margin);
 	} else {
 		pr_info("watchdog disable\n");
-		DISABLE_ALL_WDG();
+		disable_all_wdt();
 	}
 }
 
 static int  sci_wdt_kfeeder_init(void)
 {
-#ifdef CONFIG_SEC_DEBUG
-	if(sec_debug_level.en.kernel_fault)
-		return -1;
-#endif
+
 
 #if 0
 	feed_task = kthread_create(watchdog_feeder, NULL, "watchdog_feeder");
@@ -229,10 +221,10 @@ static int  sci_wdt_kfeeder_init(void)
 		wake_up_process(feed_task);
 	}
 
-	pr_info("SC8830 Watchdog: chip margin %d sec\n", chip_margin);
-	pr_info("SC8830 Watchdog: ap margin %d sec\n", ap_margin);
-	pr_info("SC8830 Watchdog: ca7 margin %d sec\n", ca7_margin);
-	pr_info("SC8830 Watchdog: ca7 irq margin %d sec\n", ca7_irq_margin);
+	pr_info("SPRD Watchdog: chip margin %d sec\n", chip_margin);
+	pr_info("SPRD Watchdog: ap margin %d sec\n", ap_margin);
+	pr_info("SPRD Watchdog: apcore margin %d sec\n", apcore_margin);
+	pr_info("SPRD Watchdog: apcore irq margin %d sec\n", apcore_irq_margin);
 
 	return 0;
 }
@@ -247,10 +239,7 @@ static void  sci_wdt_kfeeder_exit(void)
 int param_set_enabled(const char *val, struct kernel_param *kp)
 {
 	int ret;
-#ifdef CONFIG_SEC_DEBUG
-	if(sec_debug_level.en.kernel_fault)
-		return true;
-#endif
+
 	ret = param_set_ulong(val, kp);
 	if (ret < 0)
 		return ret;
@@ -290,10 +279,10 @@ static int sci_open(struct inode *inode, struct file *file)
 	if (test_and_set_bit(1, &wdt_enabled))
 		return -EBUSY;
 
-	pr_debug("%s, ca7_margin=%d, ca7_irq_margin=%d, ap_margain=%d, chip_margin=%d, feed_period=%d\n", __FUNCTION__,
-			ca7_margin,	ca7_irq_margin, ap_margin, chip_margin, feed_period);
+	pr_debug("%s, apcore_margin=%d, apcore_irq_margin=%d, ap_margain=%d, chip_margin=%d, feed_period=%d\n", __FUNCTION__,
+			apcore_margin,	apcore_irq_margin, ap_margin, chip_margin, feed_period);
 
-	watchdog_start(chip_margin, ap_margin, ca7_margin, ca7_irq_margin);
+	watchdog_start(chip_margin, ap_margin, apcore_margin, apcore_irq_margin);
 
 	return nonseekable_open(inode, file);
 }
@@ -301,7 +290,7 @@ static int sci_open(struct inode *inode, struct file *file)
 static int sci_release(struct inode *inode, struct file *file)
 {
 	clear_bit(1, &wdt_enabled);
-	DISABLE_ALL_WDG();
+	disable_all_wdt();
 	return 0;
 }
 
@@ -315,7 +304,7 @@ static ssize_t sci_write(struct file *file, const char __user *data, size_t len,
 
 static const struct watchdog_info ident = {
 	.options = WDIOF_CARDRESET | WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING,
-	.identity = "SC8830 Watchdog",
+	.identity = "sprd Watchdog",
 	.firmware_version = 1,
 };
 
@@ -354,11 +343,11 @@ static long sci_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			break;
 		}
 
-		ca7_irq_margin = time;
+		apcore_irq_margin = time;
 		wdt_feed_all();
 		/*fall through*/
 	case WDIOC_GETTIMEOUT:
-		ret = put_user(ca7_irq_margin, p);
+		ret = put_user(apcore_irq_margin, p);
 		break;
 	}
 	return ret;
@@ -383,7 +372,7 @@ static struct miscdevice sci_miscdev =
 
 static int sprd_wdt_probe(struct platform_device *pdev)
 {
-	struct resource *ap_res,*a7_res;
+	struct resource *ap_res,*apcore_res;
 	int ret = 0;
 	int irq_num = 0;
 
@@ -393,6 +382,19 @@ static int sprd_wdt_probe(struct platform_device *pdev)
 		misc_deregister(&sci_miscdev);
 		return -ENODEV;
 	}
+#ifdef CONFIG_ARCH_WHALE
+	apcore_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!apcore_res) {
+		dev_err(&pdev->dev, "sprd_wdt get io resource failed!\n");
+		return -ENODEV;
+	}
+	apcore_wdt_addr = (unsigned long)devm_ioremap_nocache(&pdev->dev, apcore_res->start,resource_size(apcore_res));
+	if (!apcore_wdt_addr)
+	{
+		dev_err(&pdev->dev, "sprd_wdt get base address failed!\n");
+		return -EBUSY;
+	}
+#else
 	ap_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!ap_res)
 	{
@@ -406,36 +408,38 @@ static int sprd_wdt_probe(struct platform_device *pdev)
 		return -EBUSY;
 	}
 
-	a7_res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (!a7_res) {
+	apcore_res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	if (!apcore_res) {
 		dev_err(&pdev->dev, "sprd_wdt get io resource failed!\n");
 		return -ENODEV;
 	}
-	a7_wdt_addr = (unsigned long)devm_ioremap_nocache(&pdev->dev, a7_res->start,resource_size(a7_res));
-	if (!a7_wdt_addr)
+	apcore_wdt_addr = (unsigned long)devm_ioremap_nocache(&pdev->dev, apcore_res->start,resource_size(apcore_res));
+	if (!apcore_wdt_addr)
 	{
 		dev_err(&pdev->dev, "sprd_wdt get base address failed!\n");
 		return -EBUSY;
 	}
-
+#endif
 	irq_num = platform_get_irq(pdev, 0);
 	if (irq_num < 0) {
 		dev_err(&pdev->dev, "no IRQ resource info\n");
 		return -EIO;
 	}
 #ifndef CONFIG_SPRD_WATCHDOG_SYS_FIQ
-	ret = devm_request_irq(&pdev->dev, irq_num, ca7_wdg_isr, IRQF_NO_SUSPEND , "sprd_wdg", NULL);
+	ret = devm_request_irq(&pdev->dev, irq_num, sprd_wdg_isr, IRQF_NO_SUSPEND , "sprd_wdg", NULL);
 	if (ret)
 	{
 		pr_info("sprd wdg isr register failed");
 		BUG();
 	}
 #else
-	ret = fiq_glue_register_handler(&ca7_wdg_fiq_glue_handler);
-	if (ret == 0)
+	ret = fiq_glue_register_handler(&sprd_wdg_fiq_glue_handler);
+	if (ret == 0) {
+		disable_fiq(irq_num);
 		enable_fiq(irq_num);
-	else
+	} else {
 		pr_err("<%s> fiq_glue_register_handler failed %d!\n", __func__, ret);
+	}
 #endif
 
 	sci_wdt_kfeeder_init();
@@ -472,16 +476,11 @@ static int __init sci_wdt_init(void)
 {
 	int ret = 0;
 
-#ifdef CONFIG_SEC_DEBUG
-	if(sec_debug_level.en.kernel_fault)
-		return -1;
-#endif
-
 	if (wdt_init())
 		goto wdt_out;
 
 	boot_status = 0;
-	pr_info("SC8830 Watchdog: userspace watchdog feeder\n");
+	pr_info("sprd Watchdog: userspace watchdog feeder\n");
 
 	 platform_driver_register(&sprd_wdt_driver);
 
@@ -504,10 +503,10 @@ MODULE_ALIAS_MISCDEV(SPRD_WATCHDOG_MINOR);
 
 module_param(chip_margin, int, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(chip_margin, "Chip Watchdog margin in seconds (default 15s)");
-module_param(ca7_margin, int, S_IWUSR | S_IRUGO);
-MODULE_PARM_DESC(ca7_margin, "CA7 Watchdog margin in seconds (default 10s)");
-module_param(ca7_irq_margin, int, S_IWUSR | S_IRUGO);
-MODULE_PARM_DESC(ca7_irq_margin, "CA7 Watchdog irq margin in seconds (default 9s)");
+module_param(apcore_margin, int, S_IWUSR | S_IRUGO);
+MODULE_PARM_DESC(apcore_margin, "AP Core Watchdog margin in seconds (default 10s)");
+module_param(apcore_irq_margin, int, S_IWUSR | S_IRUGO);
+MODULE_PARM_DESC(apcore_irq_margin, "AP Core Watchdog irq margin in seconds (default 9s)");
 module_param(ap_margin, int, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(ap_margin, "AP Watchdog margin in seconds (default 12s)");
 
