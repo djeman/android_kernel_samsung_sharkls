@@ -35,9 +35,6 @@ void __fat_fs_error(struct super_block *sb, int report, const char *fmt, ...)
 		printk(KERN_ERR "FAT-fs (%s[%d:%d]): error, %pV\n",
 				sb->s_id, MAJOR(bd_dev), MINOR(bd_dev), &vaf);
 
-		if (opts->errors == FAT_ERRORS_RO && !(sb->s_flags & MS_RDONLY))
-	    			ST_LOG("FAT-fs (%s[%d:%d]): error, %pV\n",
-				sb->s_id, MAJOR(bd_dev), MINOR(bd_dev), &vaf);
 		va_end(args);
 	}
 
@@ -48,9 +45,6 @@ void __fat_fs_error(struct super_block *sb, int report, const char *fmt, ...)
 		sb->s_flags |= MS_RDONLY;
 		printk(KERN_ERR "FAT-fs (%s[%d:%d]): Filesystem has been "
 				"set read-only\n",
-				sb->s_id, MAJOR(bd_dev), MINOR(bd_dev));
-
-		ST_LOG("FAT-fs (%s[%d:%d]): Filesystem has been set read-only\n",
 				sb->s_id, MAJOR(bd_dev), MINOR(bd_dev));
 	}
 }

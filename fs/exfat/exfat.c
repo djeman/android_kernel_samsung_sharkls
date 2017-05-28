@@ -1753,7 +1753,6 @@ void fs_error(struct super_block *sb)
 	else if ((opts->errors == EXFAT_ERRORS_RO) && !(sb->s_flags & MS_RDONLY)) {
 		sb->s_flags |= MS_RDONLY;
 		printk(KERN_ERR "[EXFAT] Filesystem has been set read-only\n");
-		ST_LOG("[EXFAT] Filesystem has been set read-only\n");
 	}
 }
 

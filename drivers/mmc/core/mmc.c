@@ -23,12 +23,6 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 
-#ifdef CONFIG_MMC_SUPPORT_STLOG
-#include <linux/stlog.h>
-#else
-#define ST_LOG(fmt,...)
-#endif
-
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
 	0,		0,		0,		0
@@ -1415,11 +1409,10 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		}
 	}
 
-	if (!oldcard){
+	if (!oldcard)
 		host->card = card;
-		ST_LOG("<%s> %s: card init succeed\n", __func__,mmc_hostname(host));
-	}
-	//printk("%s: mmc_init_card success\n", mmc_hostname(host));
+
+	printk("%s: mmc_init_card success\n", mmc_hostname(host));
 	mmc_free_ext_csd(ext_csd);
 	return 0;
 

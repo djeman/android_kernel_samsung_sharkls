@@ -21,7 +21,3 @@ config EXFAT_VIRTUAL_XATTR_SELINUX_LABEL
 	help
 	  Set this to the default string for SELinux label.
 
-config EXFAT_SUPPORT_STLOG
-	bool "Enable storage log"
-	default y
-	depends on EXFAT_FS && PROC_STLOG

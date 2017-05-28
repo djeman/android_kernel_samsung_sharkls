@@ -69,8 +69,3 @@ config PROC_PAGE_MONITOR
           interfaces will reduce the size of the kernel by approximately 4kb.
 
 source "fs/proc/sprd_debug/Kconfig"
-
-config PROC_STLOG
-	bool "Enable Storage log"
-	depends on PROC_FS
-	default y
