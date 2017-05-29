@@ -16,6 +16,7 @@
 #include <linux/kernel.h>
 #include <linux/stat.h>
 #include <linux/err.h>
+#include <soc/sprd/arch_misc.h>
 #include "sprd_otp.h"
 
 #define BLK_UID_HIGH                    ( 0 )
@@ -31,6 +32,9 @@
 
 #define BLK_WIDTH_OTP_EMEMORY			( 8 ) /* bit counts */
 #define BLK_ADC_DETA_ABC_OTP			( 7 ) /* start block for ADC otp delta */
+#define BLK_DHR_DETA_SHARKLC		( 13 )
+#define BLK_DHR_DETA_SHARKLS		( 12 )
+
 
 u32 __weak __ddie_efuse_read(int blk_index)
 {
@@ -56,7 +60,7 @@ EXPORT_SYMBOL_GPL(sci_efuse_get_uid);
 || defined(CONFIG_ARCH_SCX20)
 #define BLK_THM_DETA		(13)
 #define THM_CAL_BIT			(26)
-#elif defined(CONFIG_ARCH_SCX35LT8)
+#elif defined(CONFIG_ARCH_SCX35LT8) || defined(CONFIG_ARCH_WHALE)
 #define BLK_THM_DETA		(15)
 #define THM_CAL_BIT			(17)
 #define THM_CAL_OFFSET		273020
@@ -68,7 +72,9 @@ EXPORT_SYMBOL_GPL(sci_efuse_get_uid);
 #define THM_CAL_BIT			(24)
 #endif
 
-#ifdef CONFIG_ARCH_SCX35LT8
+#define BLK_THM_DETA_SHARKLSC		( 12 )
+
+#if defined (CONFIG_ARCH_SCX35LT8) || defined(CONFIG_ARCH_WHALE) 
 u32 thm_cal_algorithm(int bit_off)
 {
    u32 k_real;
@@ -147,27 +153,94 @@ int  sci_efuse_bcore_thm_cal_get(int *cal,int *offset)
 
 
 EXPORT_SYMBOL_GPL(sci_efuse_bcore_thm_cal_get);
+
+#define BLK_BIG_OSC_DETA	13
+#define BLK_LITTLE_OSC_DETA	3
+
+int sci_efuse_bigcpu_osc_get(u32 *p_cal_data)
+{
+	u32 data=__ddie_efuse_read(BLK_BIG_OSC_DETA);
+	u32 bigcpu_osc = data & 0x3F;
+	if (bigcpu_osc ==0) {
+		*p_cal_data  = 0;
+		return -1;
+	}
+	*p_cal_data = bigcpu_osc ;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(sci_efuse_bigcpu_osc_get);
+
+int sci_efuse_litcpu_osc_get(u32 *p_cal_data)
+{
+	u32 data=__ddie_efuse_read(BLK_LITTLE_OSC_DETA);
+	u32 litcpu_osc = data & 0x3F;
+	if (litcpu_osc ==0) {
+		*p_cal_data  = 0;
+		return -1;
+	}
+	*p_cal_data = litcpu_osc ;
+	return 0;
+}
+
+EXPORT_SYMBOL_GPL(sci_efuse_litcpu_osc_get);
 #endif
 
 int  sci_efuse_thermal_cal_get(int *cal)
 {
-	u32 data=__ddie_efuse_read(BLK_THM_DETA);
-	int thm_cal = (data >> THM_CAL_BIT) & 0x001F;
+	u32 data = 0;
+	int thm_cal = 0;
+	if(soc_is_scx9832a_v0() || soc_is_scx9830i_v0()){
+		data=__ddie_efuse_read( BLK_THM_DETA_SHARKLSC);
+	}else{
+		data=__ddie_efuse_read(BLK_THM_DETA);
+	}
+	thm_cal = (data >> THM_CAL_BIT) & 0x001F;
 	if (thm_cal ==0) {
 		*cal  = 0;
 		return -1;
 	}
-	*cal = thm_cal -16;
+	*cal = thm_cal * 1000 -16000;
 	return 0;
 }
 EXPORT_SYMBOL_GPL(sci_efuse_thermal_cal_get);
 
+#ifdef CONFIG_ARCH_SCX20
+#define BLK_BINNING_DETA	13
+#define BINNING_CAL_BIT			(15)
+
+int sci_efuse_binning_result_get(u32 *p_binning_data)
+{
+	u32 data=__ddie_efuse_read(BLK_BINNING_DETA);
+	u32 binning = (data >> BINNING_CAL_BIT) & 0xF;
+	if (binning ==0) {
+		*p_binning_data  = 0;
+		return -1;
+	}
+	*p_binning_data = binning ;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(sci_efuse_binning_result_get);
+#endif
+
 #if defined(CONFIG_ARCH_SCX35L)
 int  sci_efuse_Dhryst_binning_get(int *cal)
 {
-	u32 data=__ddie_efuse_read(BLK_DHR_DETA);
-	int Dhry_binning = (data >> 4) & 0x003F;
-	pr_info("%s() get efuse block %u, deta: 0x%08x\n", __func__, BLK_DHR_DETA, Dhry_binning);
+	u32 data = 0;
+	int Dhry_binning = 0;
+	if(soc_is_scx9832a_v0()){
+		data=__ddie_efuse_read(BLK_DHR_DETA_SHARKLC);
+		Dhry_binning = (data >> 10) & 0x003F;
+		pr_info("%s() get efuse block %u, deta: 0x%08x\n", __func__, BLK_DHR_DETA_SHARKLC, Dhry_binning);
+	}else if(soc_is_scx9830i_v0()){
+		data=__ddie_efuse_read(BLK_DHR_DETA_SHARKLS);
+		Dhry_binning = (data >> 4) & 0x003F;
+		pr_info("%s() get efuse block %u, deta: 0x%08x\n", __func__, BLK_DHR_DETA_SHARKLC, Dhry_binning);
+	}else{
+		data=__ddie_efuse_read(BLK_DHR_DETA);
+		Dhry_binning = (data >> 4) & 0x003F;
+		pr_info("%s() get efuse block %u, deta: 0x%08x\n", __func__, BLK_DHR_DETA, Dhry_binning);
+	}
+
 	*cal = Dhry_binning;
 	return 0;
 }
@@ -216,8 +289,13 @@ int sci_temp_efuse_calibration_get(unsigned int *p_cal_data)
 }
 EXPORT_SYMBOL_GPL(sci_temp_efuse_calibration_get);
 
+#if defined(CONFIG_ADIE_SC2731)
+#define BASE_ADC_P0				728	//3.6V
+#define BASE_ADC_P1				850	//4.2V
+#else
 #define BASE_ADC_P0				711	//3.6V
 #define BASE_ADC_P1				830	//4.2V
+#endif
 #define VOL_P0					3600
 #define VOL_P1					4200
 //#define ADC_DATA_OFFSET			128
@@ -225,7 +303,24 @@ int sci_efuse_calibration_get(unsigned int *p_cal_data)
 {
 	unsigned int deta = 0;
 	unsigned short adc_temp = 0;
+#if defined(CONFIG_ADIE_SC2731)
+#if 0
+	adc_temp = (__adie_efuse_read(0) & BIT(0));
+	if (adc_temp)
+		return 0;
+#endif
+	deta = __adie_efuse_read_bits(BITSINDEX(18, 0), 16);
 
+	pr_info("%s() get efuse block %u, deta: 0x%08x\n", __func__, BLK_ADC_DETA, deta);
+	if ((!deta) || (p_cal_data == NULL)) {
+		return 0;
+	}
+	adc_temp = ((deta >> 8) & 0x00FF) + BASE_ADC_P0 - ADC_DATA_OFFSET;
+	p_cal_data[1] = (VOL_P0) | ((adc_temp << 2) << 16);
+	adc_temp = (deta & 0x00FF) + BASE_ADC_P1 - ADC_DATA_OFFSET;
+	p_cal_data[0] = (VOL_P1) | ((adc_temp << 2) << 16);
+	return 1;
+#else
 #if defined(CONFIG_ADIE_SC2723) || defined(CONFIG_ADIE_SC2723S)
 	/* verify the otp data of ememory written or not */
 	adc_temp = (__adie_efuse_read(0) & BIT(7));
@@ -256,6 +351,7 @@ int sci_efuse_calibration_get(unsigned int *p_cal_data)
 	p_cal_data[0] = (VOL_P1) | ((adc_temp << 2) << 16);
 
 	return 1;
+#endif
 }
 
 EXPORT_SYMBOL_GPL(sci_efuse_calibration_get);
@@ -313,6 +409,24 @@ int sci_efuse_fgu_cal_get(unsigned int *p_cal_data)
 	p_cal_data[1] = p_cal_data[0] - 410 - data + 16;	//3.6V
 
 	data = __adie_efuse_read_bits(BITSINDEX(13, 1), 9);
+	printk("sci_efuse_fgu_cal_get 0 data data:0x%x\n", data);
+	p_cal_data[2] = (((data) & 0x1FF) + 8192) - 256;
+	return 1;
+#elif defined(CONFIG_ADIE_SC2731)
+	unsigned int data,blk0;
+#if 0
+	blk0 = __adie_efuse_read(0);
+	if (!(blk0 & (1))) {
+		return 0;
+	}
+#endif
+	data = __adie_efuse_read_bits(BITSINDEX(3, 0), 9);
+	printk("sci_efuse_fgu_cal_get 4.2 data data:0x%x\n", data);
+	p_cal_data[0] = (data + 6963) - 4096 - 256-8;	//4.0V or 4.2V
+	data = __adie_efuse_read_bits(BITSINDEX(4, 9), 6);
+	printk("sci_efuse_fgu_cal_get 3.6 data data:0x%x\n", data);
+	p_cal_data[1] = p_cal_data[0] - 410 - data + 32;	//3.6V
+	data = __adie_efuse_read_bits(BITSINDEX(4, 0), 9);
 	printk("sci_efuse_fgu_cal_get 0 data data:0x%x\n", data);
 	p_cal_data[2] = (((data) & 0x1FF) + 8192) - 256;
 
@@ -523,6 +637,76 @@ int sci_efuse_get_cal_v2(unsigned int *pdata, int num)
 
 EXPORT_SYMBOL_GPL(sci_efuse_get_cal_v2);
 
+/*
+* sci_efuse_get_cal_v3 - read 2 point adc calibration data saved in efuse
+* @pdata: adc data pointer
+* pdata[0] -> 0.9v
+* pdata[1] -> 0.3v
+* @num: the length of adc data
+*
+* retruns 0 if success, else
+* returns negative number.
+*/
+int sci_efuse_get_cal_v3(unsigned int *pdata, int num)
+{
+	int i;
+	u32 efuse_data;
+	u8 *delta = (u8 *) &efuse_data;
+	const u16 ideal[2][2] = {
+		{900, 737},
+		{300, 245},
+	};
+	if (!pdata || num < 2) {
+		return -1;
+	}
+	efuse_data = __ddie_efuse_read(BLK_ADC_DETA_ABC);
+	pr_info("%s efuse block(%d) data: 0x%08x\n", __func__, BLK_ADC_DETA_ABC, efuse_data);
+	WARN_ON(!(efuse_data & BIT(31)));
+	/* BIT 31 is protected bit */
+	efuse_data &= 0xFF0000;
+	/* get BIT16 ~ BIT23 in block 7 */
+	if (!efuse_data) {
+		return -2;
+	}
+	pdata[0] = (unsigned int)ADC_VOL(delta[2], ideal[0][1], ideal[0][0]);
+	efuse_data = __ddie_efuse_read(BLK_ADC_DETA_D);
+	pr_info("efuse block(%d) data: 0x%08x\n", BLK_ADC_DETA_D, efuse_data);
+	WARN_ON(!(efuse_data & BIT(31)));
+	efuse_data &= 0xFF0000;
+	/* get BIT16 ~ BIT23 in block 9 */
+	if (!(efuse_data)) {
+		return -3;
+	}
+	pdata[1] = (unsigned int)ADC_VOL(delta[2], ideal[1][1], ideal[1][0]);
+	/* dump adc calibration parameters */
+	printk("%s adc_cal: \n", __func__);
+	for (i = 0; i < num; i++) {
+		printk("%d -- %d; \n", (pdata[i] & 0xFFFF),
+			(pdata[i] >> 16) & 0xFFFF);
+	}
+	printk("\n");
+	return 0;
+}
+EXPORT_SYMBOL_GPL(sci_efuse_get_cal_v3);
+
+#if defined(CONFIG_ARCH_SCX20)
+#define BLK_USB_PHY_TUNE 12
+int sci_efuse_usb_phy_tune_get(unsigned int *p_cal_data)
+{
+	unsigned int data, ret;
+
+	data = __ddie_efuse_read(BLK_USB_PHY_TUNE);
+
+	*p_cal_data = (data >> 16) & 0x1f;
+	ret = !!(data & 1 << 30);
+	pr_info("%s: usb phy tune is %s, tfhres: 0x%x\n",
+		__func__, ret ? "OK" : "NOT OK", *p_cal_data);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sci_efuse_usb_phy_tune_get);
+#endif
+
 #if defined(CONFIG_ADIE_SC2723) || defined(CONFIG_ADIE_SC2723S)
 
 int sci_efuse_ib_trim_get(unsigned int *p_cal_data)
@@ -539,5 +723,34 @@ int sci_efuse_ib_trim_get(unsigned int *p_cal_data)
 	return 1;
 }
 EXPORT_SYMBOL_GPL(sci_efuse_ib_trim_get);
+
+#endif
+#if defined(CONFIG_ADIE_SC2731)
+int sci_efuse_typec_cal_get(unsigned int *p_cal_data)
+{
+		unsigned int data, blk0;
+#if 0
+		blk0 = __adie_efuse_read(0);
+		if (blk0 & (1)) {
+			return 0;
+		}
+#endif
+		if ((p_cal_data == NULL)) {
+			return 0;
+		}
+
+		data = __adie_efuse_read_bits(BITSINDEX(13, 11), 5);
+		printk("sci_efuse_typec_cal_get data:0x%x\n", data);
+		p_cal_data[0] = data;	/*type-c cc1*/
+
+		data = __adie_efuse_read_bits(BITSINDEX(13, 6), 5);
+		printk("sci_efuse_typec_cal_get data:0x%x\n", data);
+		p_cal_data[1] = data;	/*type-c cc2*/
+
+		return 1;
+
+}
+EXPORT_SYMBOL_GPL(sci_efuse_typec_cal_get);
+
 
 #endif

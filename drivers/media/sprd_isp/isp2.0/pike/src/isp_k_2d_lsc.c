@@ -20,7 +20,7 @@
 #include "isp_drv.h"
 
 
-#define ISP_LSC_TIME_OUT_MAX        500
+#define ISP_LSC_TIME_OUT_MAX        5
 #define ISP_LSC_BUF0                0
 #define ISP_LSC_BUF1                1
 
@@ -336,7 +336,7 @@ static int32_t isp_k_2d_lsc_param_load(struct isp_k_private *isp_private)
 
 	while ((0x00 == (reg_value & ISP_INT_EVT_LSC_LOAD))
 		&& (time_out_cnt < ISP_LSC_TIME_OUT_MAX)) {
-		udelay(1);
+		msleep(1);
 		reg_value = REG_RD(ISP_INT_RAW0);
 		time_out_cnt++;
 	}

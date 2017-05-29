@@ -337,6 +337,7 @@ struct dcam_addr {
 	uint32_t               uaddr_vir;
 	uint32_t               vaddr_vir;
 	uint32_t               zsl_private;
+
 };
 
 struct dcam_sc_tap {

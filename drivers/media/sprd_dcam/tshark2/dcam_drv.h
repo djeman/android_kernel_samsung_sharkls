@@ -226,6 +226,7 @@ enum iram_owner {
 enum dcam_clk_sel {
 	DCAM_CLK_384M = 0,
 	DCAM_CLK_312M,
+	DCAM_CLK_307M2,
 	DCAM_CLK_256M,
 	DCAM_CLK_128M,
 	DCAM_CLK_76M8,
@@ -342,6 +343,7 @@ struct dcam_addr {
 	uint32_t               uaddr_vir;
 	uint32_t               vaddr_vir;
 	uint32_t               zsl_private;
+
 };
 
 struct dcam_sc_tap {
@@ -383,7 +385,6 @@ struct dcam_get_path_id {
 	struct dcam_size       input_size;
 	struct dcam_rect       input_trim;
 	struct dcam_size       output_size;
-	uint32_t               camera_id;
 };
 
 struct dcam_path_info {
@@ -451,6 +452,5 @@ int32_t    dcam_rotation_end(void);
 int32_t    dcam_get_path_id(struct dcam_get_path_id *path_id, uint32_t *channel_id);
 int32_t    dcam_stop_sc_coeff(void);
 int32_t    dcam_get_path_capability(struct dcam_path_capability *capacity);
-void       dcam_set_highclk_flag(uint32_t flag);
 
 #endif //_DCAM_DRV_8830_H_

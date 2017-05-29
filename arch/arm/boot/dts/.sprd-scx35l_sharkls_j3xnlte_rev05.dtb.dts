@@ -24,9 +24,9 @@
 /include/ "sprd-sound.dtsi"
 /include/ "sprd-scx35l_batterydata_j3xlte_r00.dtsi"
 
-# 1 "/home/djeman/android/cyanogen/kernel/samsung/j3xnlte/arch/arm/boot/dts/include/dt-bindings/gpio/gpio.h" 1
+# 1 "/home/djeman/android/lineage/kernel/samsung/j3xnlte/arch/arm/boot/dts/include/dt-bindings/gpio/gpio.h" 1
 # 32 "arch/arm/boot/dts/sprd-scx35l_sharkls_j3xnlte_rev05.dts" 2
-# 1 "/home/djeman/android/cyanogen/kernel/samsung/j3xnlte/arch/arm/boot/dts/include/dt-bindings/interrupt-controller/irq.h" 1
+# 1 "/home/djeman/android/lineage/kernel/samsung/j3xnlte/arch/arm/boot/dts/include/dt-bindings/interrupt-controller/irq.h" 1
 # 33 "arch/arm/boot/dts/sprd-scx35l_sharkls_j3xnlte_rev05.dts" 2
 
 / {

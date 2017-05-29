@@ -13,7 +13,6 @@
 
 #include "gspn_drv.h"
 #include "gspn_coef_generate.h"
-
 //we use "Least Recently Used(LRU)" to implement the coef-matrix cache policy
 
 /*
@@ -21,7 +20,7 @@ func:cache_coef_hit_check
 desc:find the entry have the same in_w in_h out_w out_h
 return:if hit,return the entry pointer; else return null;
 */
-static COEF_ENTRY_T* gspn_coef_cache_hit_check(GSPN_CONTEXT_T *gspnCtx,
+static COEF_ENTRY_T* gspn_coef_cache_hit_check(GSPN_CONTEXT_T *gspn_ctx,
         uint16_t in_w, uint16_t in_h,
         uint16_t out_w,uint16_t out_h,
         uint16_t hor_tap, uint16_t ver_tap)
@@ -31,9 +30,7 @@ static COEF_ENTRY_T* gspn_coef_cache_hit_check(GSPN_CONTEXT_T *gspnCtx,
     COEF_ENTRY_T* pos = NULL;
 
     total_cnt++;
-    GSPN_LOGI("1111, &gspnCtx->coef_list = 0x%x\n", &gspnCtx->coef_list);		
-    list_for_each_entry(pos, &gspnCtx->coef_list, list) {
-    GSPN_LOGI("1111, pos = 0x%x\n", pos);		
+    list_for_each_entry(pos, &gspn_ctx->coef_list, list) {
         if(pos->in_w == in_w
            && pos->in_h == in_h
            && pos->out_w == out_w
@@ -49,10 +46,10 @@ static COEF_ENTRY_T* gspn_coef_cache_hit_check(GSPN_CONTEXT_T *gspnCtx,
     return NULL;
 }
 
-static inline void gspn_coef_cache_move_to_head(GSPN_CONTEXT_T *gspnCtx, COEF_ENTRY_T* pEntry)
+static inline void gspn_coef_cache_move_to_head(GSPN_CONTEXT_T *gspn_ctx, COEF_ENTRY_T* entry)
 {
-    list_del(&pEntry->list);
-    list_add(&pEntry->list, &gspnCtx->coef_list);
+    list_del(&entry->list);
+    list_add(&entry->list, &gspn_ctx->coef_list);
 }
 
 static int16_t sum_fun(int16_t *data, int8_t ilen)
@@ -73,19 +70,18 @@ static void* _Allocate(uint32_t size,
     ulong begin_addr = 0;
     ulong temp_addr = 0;
     if (NULL == pool_ptr) {
-        //printk("GSP_Allocate:%d _Allocate error! \n",__LINE__);
+        GSPN_LOGE("GSP_Allocate:%d _Allocate error! \n",__LINE__);
         return NULL;
     }
     begin_addr = pool_ptr->begin_addr;
     temp_addr = begin_addr + pool_ptr->used_size;
     temp_addr = (((temp_addr + (1UL << align_shift)-1) >> align_shift) << align_shift);
     if (temp_addr + size > begin_addr + pool_ptr->total_size) {
-        //printk("GSP_Allocate err:%d,temp_addr:0x%08x,size:%d,begin_addr:0x%08x,total_size:%d,used_size:%d\n",__LINE__,temp_addr,size,begin_addr,pool_ptr->total_size,pool_ptr->used_size);
+        GSPN_LOGE("GSP_Allocate err:%d,temp_addr:0x%08x,size:%d,begin_addr:0x%08x,total_size:%d,used_size:%d\n",__LINE__,temp_addr,size,begin_addr,pool_ptr->total_size,pool_ptr->used_size);
         return NULL;
     }
     pool_ptr->used_size = (temp_addr + size) - begin_addr;
     memset((void *)temp_addr, 0, size);
-    //printk("GSP_Allocate:%d _Allocate success!%08x \n",__LINE__,temp_addr);
     return (void *)temp_addr;
 }
 
@@ -166,9 +162,7 @@ static void normalize_inter(int64_t * data, int16_t * int_data, uint8_t ilen)
         }
     } else {
         for (it = 0; it < ilen; it++) {
-            tmp_d =
-                div64_s64_s64(tmp_data[it] * (int64_t) 256,
-                              tmp_sum_val);
+            tmp_d = div64_s64_s64(tmp_data[it] * (int64_t) 256, tmp_sum_val);
             int_data[it] = (uint16_t) tmp_d;
         }
     }
@@ -295,7 +289,7 @@ void WriteScalarCoef(int16_t *scale_coef,
 
     for (i = 0; i < 8; i++) {
         for (j = 0; j < len; j++) {
-            *(scale_coef + j) = *(coef_ptr + i * len + len - 1 - j);
+            *(scale_coef + i * COEF_ARR_COL_MAX + j) = *(coef_ptr + i * len + len - 1 - j);
         }
     }
 }
@@ -309,14 +303,14 @@ void _rearrang_coeff(void* src, void*dst, int32_t tap)
     src_ptr = (int16_t*)src;
     dst_ptr = (int16_t*)dst;
 
-    memset((void*)dst_ptr, 0x00, 8*8*sizeof(int16_t));
+    memset((void*)dst_ptr, 0x00, COEF_ARR_ROWS*COEF_ARR_COL_MAX*sizeof(int16_t));
 
     switch(tap) {
         case 6:
         case 2: {
             for(i = 0; i<8; i++) {
                 for(j = 0; j< tap; j++) {
-                    *(dst_ptr+i*32+1+j) = *(src_ptr+i*32+j);
+                    *(dst_ptr+i*COEF_ARR_COL_MAX + j) = *(src_ptr+i*COEF_ARR_COL_MAX+j);
                 }
             }
         }
@@ -325,14 +319,16 @@ void _rearrang_coeff(void* src, void*dst, int32_t tap)
         case 4: {
             for(i = 0; i<8; i++) {
                 for(j = 0; j< tap; j++) {
-                    *(dst_ptr+i*16+j) = *(src_ptr+i*16+j);
+                    *(dst_ptr+i*COEF_ARR_COL_MAX+j) = *(src_ptr+i*COEF_ARR_COL_MAX+j);
                 }
             }
         }
+        break;
+
         case 8: {
             for(i = 0; i<8; i++) {
                 for(j = 0; j< tap; j++) {
-                    *(dst_ptr+i*32+j) = *(src_ptr+i*32+j);
+                    *(dst_ptr+i*COEF_ARR_COL_MAX+j) = *(src_ptr+i*COEF_ARR_COL_MAX+j);
                 }
             }
         }
@@ -354,29 +350,29 @@ void ConfigRegister_BlockScalingCoef(int32_t *reg_scaling_hor,
 
 
     for(i = 0; i < 8; i++) {
-        p1 = (uint16_t) (*(cong_Ycom_hor+i*8+7)) ;
-        p0 = (uint16_t) (*(cong_Ycom_hor+i*8+6)) ;
+        p1 = (uint16_t) (*(cong_Ycom_hor+i*COEF_ARR_COL_MAX+7)) ;
+        p0 = (uint16_t) (*(cong_Ycom_hor+i*COEF_ARR_COL_MAX+6)) ;
 
         reg = ((p0 & 0x1ff)) | ((p1 & 0x1ff) << 16) ;
         reg_scaling_hor[cnts+3] = reg ;
 
 
-        p1 = (uint16_t) (*(cong_Ycom_hor+i*8+5)) ;
-        p0 = (uint16_t) (*(cong_Ycom_hor+i*8+4)) ;
+        p1 = (uint16_t) (*(cong_Ycom_hor+i*COEF_ARR_COL_MAX+5)) ;
+        p0 = (uint16_t) (*(cong_Ycom_hor+i*COEF_ARR_COL_MAX+4)) ;
 
         reg = ((p0 & 0x1ff)) | ((p1 & 0x1ff) << 16 ) ;
         reg_scaling_hor[cnts+2] = reg ;
 
 
-        p1 = (uint16_t) (*(cong_Ycom_hor+i*8+3)) ;
-        p0 = (uint16_t) (*(cong_Ycom_hor+i*8+2)) ;
+        p1 = (uint16_t) (*(cong_Ycom_hor+i*COEF_ARR_COL_MAX+3)) ;
+        p0 = (uint16_t) (*(cong_Ycom_hor+i*COEF_ARR_COL_MAX+2)) ;
 
         reg = ((p0 & 0x1ff)) | ((p1 & 0x1ff) << 16) ;
         reg_scaling_hor[cnts+1] = reg ;
 
 
-        p1 = (uint16_t) (*(cong_Ycom_hor+i*8+1));
-        p0 = (uint16_t) (*(cong_Ycom_hor+i*8+0)) ;
+        p1 = (uint16_t) (*(cong_Ycom_hor+i*COEF_ARR_COL_MAX+1));
+        p0 = (uint16_t) (*(cong_Ycom_hor+i*COEF_ARR_COL_MAX+0)) ;
 
         reg = ((p0 & 0x1ff)) | ((p1 & 0x1ff) << 16 ) ;
         reg_scaling_hor[cnts+0] = reg ;
@@ -386,19 +382,19 @@ void ConfigRegister_BlockScalingCoef(int32_t *reg_scaling_hor,
 
     cnts = 0;
     for(i = 0; i < 8; i++) {
-        p1 = (uint16_t) (*(cong_Ycom_ver+i*8+3)) ;
-        p0 = (uint16_t) (*(cong_Ycom_ver+i*8+2)) ;
+        p1 = (uint16_t) (*(cong_Ycom_ver+i*COEF_ARR_COL_MAX+3)) ;
+        p0 = (uint16_t) (*(cong_Ycom_ver+i*COEF_ARR_COL_MAX+2)) ;
 
         reg = ((p0 & 0x1ff)) | ((p1 & 0x1ff) << 16 ) ;
         reg_scaling_ver[cnts+1] = reg ;
 
-        p1 = (uint16_t) (*(cong_Ycom_ver+i*8+1)) ;
-        p0= (uint16_t) (*(cong_Ycom_ver+i*8+0)) ;
+        p1 = (uint16_t) (*(cong_Ycom_ver+i*COEF_ARR_COL_MAX+1)) ;
+        p0= (uint16_t) (*(cong_Ycom_ver+i*COEF_ARR_COL_MAX+0)) ;
 
         reg = ((p0 & 0x1ff)) | ((p1 & 0x1ff) << 16 ) ;
         reg_scaling_ver[cnts+0] = reg ;
 
-        cnts += 4;
+        cnts += 2;
     }
 }
 
@@ -416,7 +412,7 @@ static uint8_t _InitPool(void *buffer_ptr,
     pool_ptr->begin_addr = (ulong) buffer_ptr;
     pool_ptr->total_size = buffer_size;
     pool_ptr->used_size = 0;
-    //printk("GSP_InitPool:%d,begin_addr:0x%08x,total_size:%d,used_size:%d\n",__LINE__,pool_ptr->begin_addr,pool_ptr->total_size,pool_ptr->used_size);
+
     return 1;
 }
 
@@ -439,22 +435,18 @@ static void CheckCoefRange(int16_t * coef_ptr, int16_t rows, int16_t columns, in
                 coef_arr[i][j] = 255;
                 sign = GSC_ABS(diff);
                 if ((sign & 1) == 1) {  // ilen is odd
-                    coef_arr[i][j + 1] =
-                        coef_arr[i][j + 1] + (diff + 1) / 2;
-                    coef_arr[i][j - 1] =
-                        coef_arr[i][j - 1] + (diff - 1) / 2;
+                    coef_arr[i][j + 1] = coef_arr[i][j + 1] + (diff + 1) / 2;
+                    coef_arr[i][j - 1] = coef_arr[i][j - 1] + (diff - 1) / 2;
                 } else {    // ilen is even
-                    coef_arr[i][j + 1] =
-                        coef_arr[i][j + 1] + (diff) / 2;
-                    coef_arr[i][j - 1] =
-                        coef_arr[i][j - 1] + (diff) / 2;
+                    coef_arr[i][j + 1] = coef_arr[i][j + 1] + (diff) / 2;
+                    coef_arr[i][j - 1] = coef_arr[i][j - 1] + (diff) / 2;
                 }
             }
         }
     }
 }
 
-uint32_t* gspn_gen_block_scaler_coef(GSPN_CONTEXT_T *gspnCtx,
+uint32_t* gspn_gen_block_scaler_coef(GSPN_CONTEXT_T *gspn_ctx,
                                      uint32_t i_w,
                                      uint32_t i_h,
                                      uint32_t o_w,
@@ -474,7 +466,7 @@ uint32_t* gspn_gen_block_scaler_coef(GSPN_CONTEXT_T *gspnCtx,
     int32_t *scaling_reg_buf_ver = NULL;
     int32_t hait_tmp1 = 0;
     int32_t hait_tmp2 = 0;
-    //----------------------------------
+
     int16_t *coeff_array_hor = NULL;
     int16_t *coeff_array_ver = NULL;
     uint32_t coef_buf_size = 0;
@@ -483,45 +475,40 @@ uint32_t* gspn_gen_block_scaler_coef(GSPN_CONTEXT_T *gspnCtx,
     int16_t *Y_ver_filter = NULL;
     uint32_t filter_buf_size = GSC_COUNT * sizeof(int16_t);
     GSC_MEM_POOL pool = { 0 };
-    //----------------------------------
-    COEF_ENTRY_T* pEntry = NULL;
-	
-    //GSPN_LOGI("1111.\n");
-    if(gspnCtx->cache_coef_init_flag == 1) {
-        //GSPN_LOGI("1111, gspnCtx_addr = %d.\n", gspnCtx);
-        pEntry = gspn_coef_cache_hit_check(gspnCtx, i_w,i_h,o_w,o_h,hor_tap,ver_tap);
-        if(pEntry) { //hit
-            gspn_coef_cache_move_to_head(gspnCtx, pEntry);
-            return pEntry->coef;
+
+    COEF_ENTRY_T* entry = NULL;
+
+    if(gspn_ctx->cache_coef_init_flag == 1) {
+        entry = gspn_coef_cache_hit_check(gspn_ctx, i_w,i_h,o_w,o_h,hor_tap,ver_tap);
+        if(entry) { //hit
+            gspn_coef_cache_move_to_head(gspn_ctx, entry);
+            return entry->coef;
         }
     }
 
-    //GSPN_LOGI("1111.\n");
     /* init pool and allocate static array */
-    if (!_InitPool(gspnCtx->coef_buf_pool, MIN_POOL_SIZE, &pool)) {
-        printk("GSP_Gen_Block_Ccaler_Coef: _InitPool error! \n");
+    if (!_InitPool(gspn_ctx->coef_buf_pool, MIN_POOL_SIZE, &pool)) {
+        GSPN_LOGE("GSP_Gen_Block_Ccaler_Coef: _InitPool error! \n");
         return 0;
     }
-    //GSPN_LOGI("1111.\n");
+
     coef_buf_size = COEF_ARR_ROWS * COEF_ARR_COL_MAX * sizeof(int16_t);
     cong_Ycom_hor = (int16_t*)_Allocate(coef_buf_size, 2, &pool);
     cong_Ycom_ver = (int16_t*)_Allocate(coef_buf_size, 2, &pool);
-    coeff_array_hor = (int16_t*)_Allocate(8 * 8, 2, &pool);
-    coeff_array_ver = (int16_t*)_Allocate(8 * 8, 2, &pool);
+    coeff_array_hor = (int16_t*)_Allocate(coef_buf_size, 2, &pool);
+    coeff_array_ver = (int16_t*)_Allocate(coef_buf_size, 2, &pool);
     if (NULL == cong_Ycom_hor || NULL == cong_Ycom_ver ||NULL == coeff_array_hor ||NULL == coeff_array_ver) {
         return 0;
     }
-    //GSPN_LOGI("1111.\n");
+
     y_coef_data_x = _Allocate(filter_buf_size, 2, &pool);
     Y_hor_filter = _Allocate(filter_buf_size, 2, &pool);
     Y_ver_filter = _Allocate(filter_buf_size, 2, &pool);
-    //GSPN_LOGI("1111.\n");
+
     if (NULL == y_coef_data_x || NULL == Y_hor_filter || NULL == Y_ver_filter) {
-        GSPN_LOGI("1111.\n");
-		return 0;
+        return 0;
     }
 
-    GSPN_LOGI("1111.\n");
     /* horizontal direction */
     /* Y component */
     coef_len = CalY_ScalingCoef(hor_tap, i_w, o_w, y_coef_data_x, 1, &pool);
@@ -530,26 +517,23 @@ uint32_t* gspn_gen_block_scaler_coef(GSPN_CONTEXT_T *gspnCtx,
     while (pos_start >= 8) {
         pos_start -= 8;
     }
-    //GSPN_LOGI("1111.\n");
     GetFilter(pos_start, y_coef_data_x, Y_hor_filter, 8, coef_len, Y_hor_filter_len);
     WriteScalarCoef(cong_Ycom_hor, Y_hor_filter, hor_tap);
-    CheckCoefRange(cong_Ycom_hor, 8, hor_tap, 8);
+    CheckCoefRange(cong_Ycom_hor, 8, hor_tap, COEF_ARR_COL_MAX);
 
-    GSPN_LOGI("1111.\n");
     /* vertical direction */
-    coef_len = CalY_ScalingCoef(ver_tap, i_h, o_h, y_coef_data_x, 1, &pool);
+    /* cmodel here do not distinguish horizontal or vertical direction */
+    coef_len = CalY_ScalingCoef(ver_tap, i_h, o_h, y_coef_data_x, 0, &pool);
 
     pos_start = coef_len / 2;
     while (pos_start >= 8) {
         pos_start -= 8;
     }
-    GSPN_LOGI("1111.\n");
+
     GetFilter(pos_start, y_coef_data_x, Y_ver_filter, 8, coef_len, Y_ver_filter_len);
-    GSPN_LOGI("1111.\n");
-	WriteScalarCoef(cong_Ycom_ver, Y_ver_filter, ver_tap);
-   // GSPN_LOGI("1111.\n");
-	CheckCoefRange(cong_Ycom_ver, 8, ver_tap, 8);
-    GSPN_LOGI("1111.\n");
+    WriteScalarCoef(cong_Ycom_ver, Y_ver_filter, ver_tap);
+    CheckCoefRange(cong_Ycom_ver, 8, ver_tap, COEF_ARR_COL_MAX);
+
     _rearrang_coeff(cong_Ycom_hor, coeff_array_hor, hor_tap);
     for (i = 0; i < 8; i++) {
         for (j = 0; j < hor_tap; j++) {
@@ -564,7 +548,7 @@ uint32_t* gspn_gen_block_scaler_coef(GSPN_CONTEXT_T *gspnCtx,
             *(coeff_array_hor + i*8 +j) = hait_tmp2;
         }
     }
-    GSPN_LOGI("1111.\n");
+
     _rearrang_coeff(cong_Ycom_ver, coeff_array_ver, ver_tap);
     for (i = 0; i < 8; i++) {
         for (j = 0; j < ver_tap; j++) {
@@ -579,9 +563,9 @@ uint32_t* gspn_gen_block_scaler_coef(GSPN_CONTEXT_T *gspnCtx,
             *(coeff_array_ver + i*8 +j) = hait_tmp2;
         }
     }
-    GSPN_LOGI("1111.\n");
-    scaling_reg_buf_hor = &gspnCtx->coef_calc_buf[0];
-    scaling_reg_buf_ver = &gspnCtx->coef_calc_buf[SCALER_COEF_TAB_LEN_HOR];
+
+    scaling_reg_buf_hor = &gspn_ctx->coef_calc_buf[0];
+    scaling_reg_buf_ver = &gspn_ctx->coef_calc_buf[SCALER_COEF_TAB_LEN_HOR];
 
     ConfigRegister_BlockScalingCoef(scaling_reg_buf_hor,
                                     SCALER_COEF_TAB_LEN_HOR,
@@ -590,41 +574,27 @@ uint32_t* gspn_gen_block_scaler_coef(GSPN_CONTEXT_T *gspnCtx,
                                     coeff_array_hor,
                                     coeff_array_ver) ;
 
-    if(gspnCtx->cache_coef_init_flag == 1) {
-        pEntry = list_entry(gspnCtx->coef_list.prev, COEF_ENTRY_T, list);
-        if(pEntry->in_w == 0) {
+    if(gspn_ctx->cache_coef_init_flag == 1) {
+        entry = list_entry(gspn_ctx->coef_list.prev, COEF_ENTRY_T, list);
+        if(entry->in_w == 0) {
             GSPN_LOGI("add.\n");
         } else {
             GSPN_LOGI("swap.\n");
         }
-        if((ulong)scaling_reg_buf_hor & MEM_OPS_ADDR_ALIGN_MASK || (ulong)&pEntry->coef[0] & MEM_OPS_ADDR_ALIGN_MASK) {
-            GSPN_LOGW("memcpy use none 8B alignment address!");
+        if((ulong)scaling_reg_buf_hor & MEM_OPS_ADDR_ALIGN_MASK || (ulong)&entry->coef[0] & MEM_OPS_ADDR_ALIGN_MASK) {
+            GSPN_LOGI("memcpy use none 8B alignment address!");
         }
 
-		int32_t scaling_reg_buf_hor_new[32] = {    0x01f101fe, 0x009f0041, 0x01f10041, 0x000101fe,
-													  0x01f00000, 0x009e0030, 0x01f30052, 0x000101fc,
-													  0x01f10000, 0x00990020, 0x01f80063, 0x000101fa,
-													  0x01f30001, 0x00bf0013, 0x01ff0073, 0x000101f7,
-													  0x01f50001, 0x00830007, 0x00070083, 0x000101f5,
-													  0x01f70001, 0x007401ff, 0x001300be, 0x000001f3,
-													  0x01fa0001, 0x006401f8, 0x00200098, 0x000001f1,
-													  0x01fc0001, 0x005301f3, 0x0030009d, 0x000001f0
-													  };
-		int32_t scaling_reg_buf_ver_new[16] = {    0x00b40027, 0x01fe0027, 0x00af0018, 0x01fe003b,
-													  0x00a5000c, 0x01fe0051, 0x00950004, 0x01fe0069,
-													  0x00800000, 0x00000080, 0x006a01fe, 0x00040094,
-													  0x005201fe, 0x000c00a4, 0x003b01fe, 0x001800af
-													};
 
-        gsp_memcpy((void*)&pEntry->coef[0],(void*)scaling_reg_buf_hor_new,32*4);
-        if((ulong)scaling_reg_buf_ver & MEM_OPS_ADDR_ALIGN_MASK || (ulong)&pEntry->coef[32] & MEM_OPS_ADDR_ALIGN_MASK) {
-            GSPN_LOGW("memcpy use none 8B alignment address!");
+        gsp_memcpy((void*)&entry->coef[0],(void*)scaling_reg_buf_hor,32*4);
+        if((ulong)scaling_reg_buf_ver & MEM_OPS_ADDR_ALIGN_MASK || (ulong)&entry->coef[32] & MEM_OPS_ADDR_ALIGN_MASK) {
+            GSPN_LOGI("memcpy use none 8B alignment address!");
         }
-        gsp_memcpy((void*)&pEntry->coef[32],(void*)scaling_reg_buf_ver_new,16*4);
-        gspn_coef_cache_move_to_head(gspnCtx, pEntry);
-        LIST_SET_ENTRY_KEY(pEntry,i_w,i_h,o_w,o_h,hor_tap,ver_tap);
+        gsp_memcpy((void*)&entry->coef[32],(void*)scaling_reg_buf_ver,16*4);
+        gspn_coef_cache_move_to_head(gspn_ctx, entry);
+        LIST_SET_ENTRY_KEY(entry,i_w,i_h,o_w,o_h,hor_tap,ver_tap);
     }
-    return pEntry->coef;
+    return entry->coef;
 }
 
 

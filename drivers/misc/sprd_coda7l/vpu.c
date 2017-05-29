@@ -45,6 +45,7 @@
 #include <linux/clk-provider.h>
 #include <linux/wakelock.h>
 
+#include <soc/sprd/arch_misc.h>
 #include <soc/sprd/sci.h>
 #include <soc/sprd/sci_glb_regs.h>
 
@@ -181,7 +182,6 @@ static int s_vpu_irq = VPU_IRQ_NUM;
 
 static unsigned long s_vpu_reg_phy_addr = 0;
 static unsigned int s_vpu_power_status_mask = 0;
-static unsigned long sprd_vpu_range_size = 0;
 
 static void __iomem *s_vpu_reg_virt_addr = NULL;
 static void __iomem *s_vpu_power_reg_vir_addr = NULL;
@@ -877,17 +877,12 @@ static int vpu_fasync(int fd, struct file *filp, int mode)
 static int vpu_map_to_register(struct file *fp, struct vm_area_struct *vm)
 {
     unsigned long pfn;
-    unsigned long vpu_map_size = 0;
 
     vm->vm_flags |= VM_IO | VM_RESERVED;
     vm->vm_page_prot = pgprot_noncached(vm->vm_page_prot);
     pfn = s_vpu_reg_phy_addr >> PAGE_SHIFT;
-    if((vm->vm_end-vm->vm_start) > sprd_vpu_range_size)
-		return  -EAGAIN ;
-	else 
-		vpu_map_size = (vm->vm_end-vm->vm_start);
 
-    return remap_pfn_range(vm, vm->vm_start, pfn, vpu_map_size, vm->vm_page_prot) ? -EAGAIN : 0;
+    return remap_pfn_range(vm, vm->vm_start, pfn, vm->vm_end-vm->vm_start, vm->vm_page_prot) ? -EAGAIN : 0;
 }
 
 static int vpu_map_to_physical_memory(struct file *fp, struct vm_area_struct *vm)
@@ -967,7 +962,7 @@ static int vpu_parse_dt(struct device *dev)
     s_vpu_reg_virt_addr = ioremap_nocache(res.start, resource_size(&res));
     if(!s_vpu_reg_virt_addr)
         BUG();
-    sprd_vpu_range_size = resource_size(&res);
+
     s_vpu_drv_context.irq = irq_of_parse_and_map(np, 0);
     s_vpu_drv_context.dev_np = np;
 
@@ -1042,6 +1037,10 @@ static int vpu_probe(struct platform_device *pdev)
     struct resource *res = NULL;
 
     vpu_logi("[VPUDRV] vpu_probe\n");
+
+    if (soc_is_scx9832a_v0()){
+        return -EINVAL;
+    }
 
 #ifdef CONFIG_OF
     if (pdev->dev.of_node) {
@@ -1201,7 +1200,11 @@ static int __init vpu_init(void)
     res = platform_driver_register(&vpu_driver);
     res = vpu_probe(NULL);
 #endif
-    vpu_power_shutdown();
+
+    if (!soc_is_scx9832a_v0()){
+        vpu_power_shutdown();
+    }
+
     vpu_logd("end vpu_init result=0x%x\n", res);
 
     return res;

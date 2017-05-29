@@ -15,7 +15,12 @@
 #include <linux/sprd_mm.h>
 #include <video/sprd_isp.h>
 #include <linux/vmalloc.h>
+#include <soc/sprd/arch_misc.h>
 #include "isp_reg.h"
+#include "isp_drv.h"
+
+#define ISP_RAW_NLM_MOUDLE_BUF0                0
+#define ISP_RAW_NLM_MOUDLE_BUF1                1
 
 static int32_t isp_k_vst_block(struct isp_io_param *param)
 {
@@ -30,13 +35,12 @@ static int32_t isp_k_vst_block(struct isp_io_param *param)
 
 	REG_MWR(ISP_VST_PARA, BIT_0, vst_info.bypass);
 
-	REG_MWR(ISP_VST_PARA, BIT_1, vst_info.buf_sel << 1);
-
 	return ret;
 
 }
 
-static int32_t isp_k_nlm_block(struct isp_io_param *param)
+static int32_t isp_k_nlm_block(struct isp_io_param *param,
+	struct isp_k_private *isp_private)
 {
 	int32_t ret = 0;
 	uint32_t val = 0;
@@ -45,7 +49,6 @@ static int32_t isp_k_nlm_block(struct isp_io_param *param)
 	uint32_t *buff0 = NULL;
 	uint32_t *buff1 = NULL;
 	uint32_t *buff2 = NULL;
-	unsigned long buf_addr = 0;
 	void *vst_addr = NULL;
 	void *ivst_addr = NULL;
 	void *nlm_addr = NULL;
@@ -123,7 +126,6 @@ static int32_t isp_k_nlm_block(struct isp_io_param *param)
 	REG_MWR(ISP_NLM_PARA, BIT_2, nlm_info.flat_opt_bypass << 2);
 	REG_MWR(ISP_NLM_PARA, BIT_3, nlm_info.flat_thr_bypass << 3);
 	REG_MWR(ISP_NLM_PARA, BIT_4, nlm_info.direction_mode_bypass << 4);
-	REG_MWR(ISP_NLM_PARA, BIT_31, nlm_info.buf_sel<<31);
 
 	for (i = 0; i < 5; i++) {
 		val = (nlm_info.thresh[i] & 0x3FFF) | ((nlm_info.cnt[i] & 0x1F) << 16)
@@ -139,13 +141,13 @@ static int32_t isp_k_nlm_block(struct isp_io_param *param)
 
 	REG_MWR(ISP_NLM_ADD_BACK, 0x7F, nlm_info.addback);
 
-#if defined(CONFIG_ARCH_SCX30G3)
-	REG_MWR(ISP_NLM_ADD_BACK_NEW0, 0x7F, nlm_info.addback);
-	REG_MWR(ISP_NLM_ADD_BACK_NEW0, (0x7F << 8), (nlm_info.addback << 8));
-	REG_MWR(ISP_NLM_ADD_BACK_NEW0, (0x7F << 16), (nlm_info.addback << 16));
-	REG_MWR(ISP_NLM_ADD_BACK_NEW0, (0x7F << 24), (nlm_info.addback << 24));
-	REG_MWR(ISP_NLM_ADD_BACK_NEW1, 0x7F, nlm_info.addback);
-#endif
+	if (soc_is_scx9832a_v0() || soc_is_scx30g3_v0()) {
+		REG_MWR(ISP_NLM_ADD_BACK_NEW0, 0x7F, nlm_info.addback);
+		REG_MWR(ISP_NLM_ADD_BACK_NEW0, (0x7F << 8), (nlm_info.addback << 8));
+		REG_MWR(ISP_NLM_ADD_BACK_NEW0, (0x7F << 16), (nlm_info.addback << 16));
+		REG_MWR(ISP_NLM_ADD_BACK_NEW0, (0x7F << 24), (nlm_info.addback << 24));
+		REG_MWR(ISP_NLM_ADD_BACK_NEW1, 0x7F, nlm_info.addback);
+	}
 
 	REG_MWR(ISP_NLM_ADD_BACK, BIT_7, nlm_info.opt_mode << 7);
 
@@ -166,33 +168,21 @@ static int32_t isp_k_nlm_block(struct isp_io_param *param)
 		REG_WR(ISP_NLM_LUT_W_0 + i * 4, val);
 	}
 
-	if(nlm_info.buf_sel) {
-		buf_addr = ISP_NLM_BUF1_CH0;
-		memcpy((void *)buf_addr, buff2, ISP_VST_IVST_NUM * sizeof(uint32_t));
+	if (isp_private->raw_nlm_buf_id) {
+		isp_private->raw_nlm_buf_id = ISP_RAW_NLM_MOUDLE_BUF0;
+		memcpy((void *)ISP_NLM_BUF0_CH0, buff2, ISP_VST_IVST_NUM * sizeof(uint32_t));
+		memcpy((void *)ISP_VST_BUF0_CH0, buff0, ISP_VST_IVST_NUM * sizeof(uint32_t));
+		memcpy((void *)ISP_IVST_BUF0_CH0, buff1, ISP_VST_IVST_NUM * sizeof(uint32_t));
 	} else {
-		buf_addr = ISP_NLM_BUF0_CH0;
-		memcpy((void *)buf_addr, buff2, ISP_VST_IVST_NUM * sizeof(uint32_t));
+		isp_private->raw_nlm_buf_id = ISP_RAW_NLM_MOUDLE_BUF1;
+		memcpy((void *)ISP_NLM_BUF1_CH0, buff2, ISP_VST_IVST_NUM * sizeof(uint32_t));
+		memcpy((void *)ISP_VST_BUF1_CH0, buff0, ISP_VST_IVST_NUM * sizeof(uint32_t));
+		memcpy((void *)ISP_IVST_BUF1_CH0, buff1, ISP_VST_IVST_NUM * sizeof(uint32_t));
 	}
 
-	if (nlm_info.buf_sel ) {
-		buf_addr = ISP_VST_BUF1_CH0;
-		memcpy((void *)buf_addr, buff0, ISP_VST_IVST_NUM * sizeof(uint32_t));
-	} else {
-		buf_addr = ISP_VST_BUF0_CH0;
-		memcpy((void *)buf_addr, buff0, ISP_VST_IVST_NUM * sizeof(uint32_t));
-	}
-
-	if (nlm_info.buf_sel ) {
-		buf_addr = ISP_IVST_BUF1_CH0;
-		memcpy((void *)buf_addr, buff1, ISP_VST_IVST_NUM * sizeof(uint32_t));
-	} else {
-		buf_addr = ISP_IVST_BUF0_CH0;
-		memcpy((void *)buf_addr, buff1, ISP_VST_IVST_NUM * sizeof(uint32_t));
-	}
-
-	/*vst ivst follow nlm*/
-	REG_MWR(ISP_VST_PARA, BIT_1, nlm_info.buf_sel << 1);
-	REG_MWR(ISP_IVST_PARA, BIT_1, nlm_info.buf_sel << 1);
+	REG_MWR(ISP_NLM_PARA, BIT_31, isp_private->raw_nlm_buf_id << 31);
+	REG_MWR(ISP_VST_PARA, BIT_1, isp_private->raw_nlm_buf_id << 1);
+	REG_MWR(ISP_IVST_PARA, BIT_1, isp_private->raw_nlm_buf_id << 1);
 
 	REG_MWR(ISP_NLM_PARA, BIT_0, nlm_info.bypass);
 	REG_MWR(ISP_IVST_PARA, BIT_0, nlm_info.bypass);
@@ -218,13 +208,12 @@ static int32_t isp_k_ivst_block(struct isp_io_param *param)
 
 	REG_MWR(ISP_IVST_PARA, BIT_0, ivst_info.bypass);
 
-	REG_MWR(ISP_IVST_PARA, BIT_1, ivst_info.buf_sel << 1);
-
 	return ret;
 
 }
 
-int32_t isp_k_cfg_nlm(struct isp_io_param *param)
+int32_t isp_k_cfg_nlm(struct isp_io_param *param,
+	struct isp_k_private *isp_private)
 {
 	int32_t ret = 0;
 
@@ -243,10 +232,10 @@ int32_t isp_k_cfg_nlm(struct isp_io_param *param)
 		ret = isp_k_vst_block(param);
 		break;
 	case ISP_PRO_NLM_BLOCK:
-		ret = isp_k_nlm_block(param);;
+		ret = isp_k_nlm_block(param, isp_private);
 		break;
 	case ISP_PRO_IVST_BLOCK:
-		ret = isp_k_ivst_block(param);;
+		ret = isp_k_ivst_block(param);
 		break;
 	default:
 		printk("isp_k_cfg_nlm: fail cmd id:%d, not supported.\n", param->property);

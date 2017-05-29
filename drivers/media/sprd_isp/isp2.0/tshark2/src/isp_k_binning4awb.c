@@ -18,17 +18,6 @@
 #include "isp_reg.h"
 #include "isp_drv.h"
 
-static int32_t isp_k_binging_param_update(struct isp_k_private *isp_private)
-{
-	int32_t ret = 0;
-
-	/*config buf_id 0 as default*/
-	isp_private->b4awb_buf[0].buf_flag = 1;
-	REG_WR(ISP_BINNING_MEM_ADDR, isp_private->b4awb_buf[0].buf_phys_addr);
-
-	return ret;
-}
-
 static int32_t isp_k_binning_block(struct isp_io_param *param,
 			struct isp_k_private *isp_private)
 {
@@ -41,13 +30,6 @@ static int32_t isp_k_binning_block(struct isp_io_param *param,
 		printk("isp_k_binning_block: copy error, ret=0x%x\n", (uint32_t)ret);
 		return -1;
 	}
-
-	if (isp_private->b4awb_buf[0].buf_phys_addr == 0 || isp_private->b4awb_buf[1].buf_phys_addr == 0) {
-		REG_MWR(ISP_BINNING_PARAM, BIT_0, 0x1);
-		return ret;
-	}
-
-	isp_k_binging_param_update(isp_private);
 
 	val = (binning_info.burst_mode & 0x3) << 2;
 	REG_MWR(ISP_BINNING_PARAM, 0xC, val);
@@ -75,7 +57,7 @@ static int32_t isp_k_binging_bypass(struct isp_io_param *param)
 	uint32_t bypass = 0;
 	ret = copy_from_user((void *)&bypass, param->property_param, sizeof(uint32_t));
 	if (0 != ret) {
-		printk("isp_k_binning_scaling_ratio: copy_from_user error, ret = 0x%x\n",(uint32_t)ret);
+		printk("isp_k_binging_bypass: copy_from_user error, ret = 0x%x\n",(uint32_t)ret);
 		return -1;
 	}
 
@@ -90,7 +72,7 @@ static int32_t isp_k_binging_endian(struct isp_io_param *param)
 	uint32_t endian = 0;
 	ret = copy_from_user((void *)&endian, param->property_param, sizeof(uint32_t));
 	if (0 != ret) {
-		printk("isp_k_binning_scaling_ratio: copy_from_user error, ret = 0x%x\n",(uint32_t)ret);
+		printk("isp_k_binging_endian: copy_from_user error, ret = 0x%x\n",(uint32_t)ret);
 		return -1;
 	}
 
@@ -143,7 +125,7 @@ static int32_t isp_k_binging_mem_addr(struct isp_io_param *param)
 
 	ret = copy_from_user((void *)&addr, param->property_param, sizeof(uint32_t));
 	if (0 != ret) {
-		printk("isp_k_binning_scaling_ratio: copy_from_user error, ret = 0x%x\n",(uint32_t)ret);
+		printk("isp_k_binging_mem_addr: copy_from_user error, ret = 0x%x\n",(uint32_t)ret);
 		return -1;
 	}
 
@@ -201,6 +183,68 @@ static int32_t isp_k_binning_buffaddr(struct isp_io_param *param,
 	return ret;
 }
 
+static int32_t isp_k_binging_initbuf(struct isp_io_param *param, struct isp_k_private *isp_private)
+{
+	int32_t ret = 0;
+	struct isp_buf_node node;
+
+	if (isp_buf_queue_read(&isp_private->ae_irq_queue, &node)) {
+		isp_private->is_ae_reserved_buf = 1;
+		REG_WR(ISP_BINNING_MEM_ADDR, isp_private->ae_reserved_node.k_addr);
+	} else {
+		isp_private->is_ae_reserved_buf = 0;
+		REG_WR(ISP_BINNING_MEM_ADDR, node.k_addr);
+		isp_private->bin4_cur_node = node;
+	}
+
+	return ret;
+}
+
+int32_t isp_k_binging_switch_bq_buf(struct isp_k_private *isp_private)
+{
+	int32_t ret = 0;
+	struct isp_buf_node node;
+
+	if (isp_private->is_ae_reserved_buf)
+		ret = -1;
+	else
+		isp_buf_queue_write(&isp_private->ae_user_queue, &isp_private->bin4_cur_node);
+
+	if (isp_buf_queue_read(&isp_private->ae_irq_queue, &node)) {
+		isp_private->is_ae_reserved_buf = 1;
+		REG_WR(ISP_BINNING_MEM_ADDR, isp_private->ae_reserved_node.k_addr);
+	} else {
+		isp_private->is_ae_reserved_buf = 0;
+		REG_WR(ISP_BINNING_MEM_ADDR, node.k_addr);
+		isp_private->bin4_cur_node = node;
+	}
+
+
+	return ret;
+}
+
+int32_t isp_k_binning_enqueue_buf(struct isp_k_private *isp_private, struct isp_buf_node *node)
+{
+	int32_t ret = 0;
+
+	if (node->type == ISP_NODE_TYPE_AE_RESERVED)
+		isp_private->ae_reserved_node = *node;
+	else
+		ret = isp_buf_queue_write((struct isp_buf_queue *)&isp_private->ae_irq_queue, node);
+
+	return ret;
+}
+
+int32_t isp_k_binning_dequeue_buf(struct isp_k_private *isp_private, struct isp_buf_node *node)
+{
+	int32_t ret = 0;
+
+	ret = isp_buf_queue_read(&isp_private->ae_user_queue, node);
+
+
+	return ret;
+}
+
 int32_t isp_k_cfg_binning(struct isp_io_param *param, struct isp_k_private *isp_private)
 {
 	int32_t ret = 0;
@@ -239,6 +283,9 @@ int32_t isp_k_cfg_binning(struct isp_io_param *param, struct isp_k_private *isp_
 		break;
 	case ISP_PRO_BINNING4AWB_ENDIAN:
 		ret = isp_k_binging_endian(param);
+		break;
+	case ISP_PRO_BINNING4AWB_INITBUF:
+		ret = isp_k_binging_initbuf(param, isp_private);
 		break;
 	default:
 		printk("isp_k_cfg_binning: fail cmd id:%d, not supported.\n", param->property);

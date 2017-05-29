@@ -3,39 +3,11 @@ include drivers/media/sprd_dcam/common/Makefile.inc
 
 tshark2_isp_like:=0
 
-ifeq ($(CONFIG_MACH_SP9830IEA_5M_H100),y)
+ifeq ($(CONFIG_ISP_V2),y)
 tshark2_isp_like=1
 endif
 
-ifeq ($(CONFIG_MACH_SP9830IEB_5M_H100),y)
-tshark2_isp_like=1
-endif
-
-ifeq ($(CONFIG_MACH_SP9830IEC_4M_H100),y)
-tshark2_isp_like=1
-endif
-
-ifeq ($(CONFIG_MACH_SP9830IEE_4M_H100),y)
-tshark2_isp_like=1
-endif
-
-ifeq ($(CONFIG_MACH_SP7720EA),y)
-pike_isp_like=1
-endif
-
-ifeq ($(CONFIG_MACH_SP7720EB),y)
-pike_isp_like=1
-endif
-
-ifeq ($(CONFIG_MACH_PIKEB_J1MINI_3G),y)
-pike_isp_like=1
-endif
-
-ifeq ($(CONFIG_MACH_PIKEB_J1_3G),y)
-pike_isp_like=1
-endif
-
-ifeq ($(CONFIG_MACH_SP7720EB_PRIME),y)
+ifeq ($(CONFIG_ARCH_SCX20),y)
 pike_isp_like=1
 endif
 
@@ -47,8 +19,7 @@ ifeq ($(CONFIG_ARCH_SCX35LT8),y)
 tshark2_isp_like=1
 endif
 
-#SharkLS
-ifeq ($(CONFIG_MACH_SP9830I),y)
+ifeq ($(CONFIG_ARCH_WHALE),y)
 tshark2_isp_like=1
 endif
 
@@ -76,6 +47,7 @@ sprd_isp-objs := isp_drv.o \
 		isp2.0/tshark2/src/isp_k_2d_lsc.o \
 		isp2.0/tshark2/src/isp_k_1d_lsc.o \
 		isp2.0/tshark2/src/isp_k_binning4awb.o \
+		isp2.0/tshark2/src/isp_k_buf_queue.o \
 		isp2.0/tshark2/src/isp_k_awb.o \
 		isp2.0/tshark2/src/isp_k_raw_aem.o \
 		isp2.0/tshark2/src/isp_k_bpc.o \
@@ -140,6 +112,7 @@ sprd_isp-objs := isp_drv.o \
 		isp2.0/pike/src/isp_k_2d_lsc.o \
 		isp2.0/pike/src/isp_k_1d_lsc.o \
 		isp2.0/pike/src/isp_k_binning4awb.o \
+		isp2.0/pike/src/isp_k_buf_queue.o \
 		isp2.0/pike/src/isp_k_awb.o \
 		isp2.0/pike/src/isp_k_raw_aem.o \
 		isp2.0/pike/src/isp_k_bpc.o \

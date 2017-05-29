@@ -41,9 +41,9 @@ static int32_t isp_k_pingpang_frgb_gamc(struct coordinate_xy *nodes,
 
 	p_nodes = nodes;
 
-		r_buf_addr = ISP_FGAMMA_R_BUF0_CH0;
-		g_buf_addr = ISP_FGAMMA_G_BUF0_CH0;
-		b_buf_addr = ISP_FGAMMA_B_BUF0_CH0;
+	r_buf_addr = ISP_FGAMMA_R_BUF0_CH0;
+	g_buf_addr = ISP_FGAMMA_G_BUF0_CH0;
+	b_buf_addr = ISP_FGAMMA_B_BUF0_CH0;
 
 	if (ISP_FRGB_GAMC_BUF0 == isp_private->full_gamma_buf_id) {
 		buf_id = ISP_FRGB_GAMC_BUF0;

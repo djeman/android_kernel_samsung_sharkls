@@ -333,6 +333,22 @@ static int32_t isp_k_common_lbuf_offset(struct isp_io_param *param)
 	return ret;
 }
 
+static int32_t isp_k_3a_shadow_ctrl(struct isp_io_param *param)
+{
+	int32_t ret = 0;
+	uint32_t enable = 0;
+
+	ret = copy_from_user((void *)&enable, param->property_param, sizeof(enable));
+	if (0 != ret) {
+		printk("isp_k_3a_shadow_ctrl: copy_from_user error, ret = 0x%x\n", (uint32_t)ret);
+		return -1;
+	}
+
+	REG_MWR(ISP_COMMON_RESERVED0, 1 << 2, enable  << 2);
+
+	return ret;
+}
+
 int32_t isp_k_cfg_common(struct isp_io_param *param)
 {
 	int32_t ret = 0;
@@ -401,6 +417,9 @@ int32_t isp_k_cfg_common(struct isp_io_param *param)
 		break;
 	case ISP_PRO_COMMON_LBUF_OFFSET:
 		ret = isp_k_common_lbuf_offset(param);
+		break;
+	case ISP_PRO_COMMON_3A_SINGLE_FRAME_CTRL:
+		ret = isp_k_3a_shadow_ctrl(param);
 		break;
 	default:
 		printk("isp_k_cfg_common: fail cmd id:%d, not supported.\n", param->property);

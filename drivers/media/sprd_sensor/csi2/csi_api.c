@@ -19,12 +19,23 @@
 #include "csi_api.h"
 #include "csi_log.h"
 
+#if  defined(CONFIG_ARCH_WHALE)
+
+#define CSI2_EB              (SPRD_MMAHB_BASE + 0)
+#define CSI2_EB_BIT         (1 << 3)
+#define CSI2_RST             (SPRD_MMAHB_BASE + 4)
+#define CSI2_RST_BIT        (1 << 4)
+
+#define CSI2_EB2_BIT          (1 << 4)
+#define CSI2_RST2_BIT         (1 << 5)
+#else
 #define CSI2_EB              (SPRD_MMAHB_BASE)
 #define CSI2_EB_BIT          (1 << 4)
 #define CSI2_RST             (SPRD_MMAHB_BASE + 0x4)
 #define CSI2_RST_BIT         (1 << 5)
+#endif
 
-#if defined(CONFIG_SC_FPGA) && (defined(CONFIG_MACH_SP7720EA) || defined(CONFIG_MACH_SP7720EB) || defined(CONFIG_MACH_SP7720EB_PRIME))
+#if defined(CONFIG_SC_FPGA) && (defined(CONFIG_ARCH_SCX20))
 extern void usc28c_csi_init(void);
 #endif
 void csi_api_event1_handler(int irq, void *handle);
@@ -96,10 +107,24 @@ static void csi_phy_power_down(u32 phy_id, u32 is_eb)
 
 static void csi_enable(void)
 {
-	sci_glb_set(CSI2_EB, CSI2_EB_BIT);
-	sci_glb_set(CSI2_RST, CSI2_RST_BIT);
-	udelay(1);
-	sci_glb_clr(CSI2_RST, CSI2_RST_BIT);
+#if  defined(CONFIG_ARCH_WHALE)
+	if(get_module_selectindex(MODULE_CSI) == 0) {
+		sci_glb_set(CSI2_EB, CSI2_EB_BIT);
+		sci_glb_set(CSI2_RST, CSI2_RST_BIT);
+		udelay(1);
+		sci_glb_clr(CSI2_RST, CSI2_RST_BIT);
+	} else {
+		sci_glb_set(CSI2_EB, CSI2_EB2_BIT);
+		sci_glb_set(CSI2_RST, CSI2_RST2_BIT);
+		udelay(1);
+		sci_glb_clr(CSI2_RST, CSI2_RST2_BIT);
+	}
+#else
+		sci_glb_set(CSI2_EB, CSI2_EB_BIT);
+		sci_glb_set(CSI2_RST, CSI2_RST_BIT);
+		udelay(1);
+		sci_glb_clr(CSI2_RST, CSI2_RST_BIT);
+#endif
 }
 
 int csi_api_malloc(void **handle)
@@ -131,7 +156,7 @@ u8 csi_api_init(u32 bps_per_lane, u32 phy_id)
 	csi_error_t e = SUCCESS;
     u64 base_address = CSI2_BASE;
 
-#if defined(CONFIG_SC_FPGA) && (defined(CONFIG_MACH_SP7720EA) || defined(CONFIG_MACH_SP7720EB) || defined(CONFIG_MACH_SP7720EB_PRIME))
+#if defined(CONFIG_SC_FPGA) && (defined(CONFIG_ARCH_SCX20))
 	usc28c_csi_init();
 #endif
 
@@ -193,21 +218,36 @@ u8 csi_api_start(void *handle)
 		/* MASK all interrupts */
 		csi_event_disable(0xffffffff, 1);
 		csi_event_disable(0xffffffff, 2);
+#if  defined(CONFIG_ARCH_WHALE)
+		ret = request_irq(csi_parseinfo[get_module_selectindex(MODULE_CSI)].irq,
+				(irq_handler_t)csi_api_event1_handler,
+				IRQF_SHARED,
+				"CSI2_0",
+				(void *)csi_handle);
+#else
 		ret = request_irq(IRQ_CSI_INT0,
 				(irq_handler_t)csi_api_event1_handler,
 				IRQF_SHARED,
 				"CSI2_0",
 				(void *)csi_handle);
+#endif
 		if (ret) {
 			e = ERR_UNDEFINED;
 			break;
 		}
-
+#if  defined(CONFIG_ARCH_WHALE)
+		ret = request_irq(csi_parseinfo[get_module_selectindex(MODULE_CSI)].irq2,
+				(irq_handler_t)csi_api_event2_handler,
+				IRQF_SHARED,
+				"CSI2_1",
+				(void *)csi_handle);
+#else
 		ret = request_irq(IRQ_CSI_INT1,
 				(irq_handler_t)csi_api_event2_handler,
 				IRQF_SHARED,
 				"CSI2_1",
 				(void *)csi_handle);
+#endif
 		if (ret) {
 			e = ERR_UNDEFINED;
 			break;
@@ -228,8 +268,13 @@ u8 csi_api_close(void *handle, u32 phy_id)
 	LOG_DEBUG("exit");
 	csi_api_unregister_all_events(handle);
 	csi_shut_down_phy(1);
+#if  defined(CONFIG_ARCH_WHALE)
+	free_irq(csi_parseinfo[get_module_selectindex(MODULE_CSI)].irq, &csi_handle->g_csi2_irq);
+	free_irq(csi_parseinfo[get_module_selectindex(MODULE_CSI)].irq2, &csi_handle->g_csi2_irq);
+#else
 	free_irq(IRQ_CSI_INT0, &csi_handle->g_csi2_irq);
 	free_irq(IRQ_CSI_INT1, &csi_handle->g_csi2_irq);
+#endif
 	csi_close();
 	csi_phy_power_down(phy_id, 1);
 

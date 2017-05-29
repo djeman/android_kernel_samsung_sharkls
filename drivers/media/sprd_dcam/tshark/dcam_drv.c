@@ -669,6 +669,7 @@ int32_t dcam_module_en(struct device_node *dn)
 	unsigned int	irq_no = 0;
 
 	DCAM_TRACE("DCAM: dcam_module_en, In %d \n", s_dcam_users.counter);
+
 	mutex_lock(&dcam_module_sema);
 	if (atomic_inc_return(&s_dcam_users) == 1) {
 
@@ -682,14 +683,13 @@ int32_t dcam_module_en(struct device_node *dn)
 			ret = -DCAM_RTN_MAX;
 			goto fail_exit;
 		}
+
 		ret = dcam_set_clk(dn,DCAM_CLK_312M);
 		if (ret) {
 			clk_mm_i_eb(dn,0);
 			ret = -DCAM_RTN_MAX;
 			goto fail_exit;
 		}
-
-		parse_baseaddress(dn);
 
 		dcam_reset(DCAM_RST_ALL, 0);
 		atomic_set(&s_resize_flag, 0);
@@ -737,6 +737,7 @@ int32_t dcam_module_dis(struct device_node *dn)
 
 	mutex_lock(&dcam_module_sema);
 	if (atomic_dec_return(&s_dcam_users) == 0) {
+
 		sci_glb_clr(DCAM_EB, DCAM_EB_BIT);
 		dcam_set_clk(dn,DCAM_CLK_NONE);
 		printk("DCAM: un register isr \n");
@@ -1143,6 +1144,7 @@ int32_t _dcam_stop_path(enum dcam_path_index path_index)
 	_dcam_wait_for_quickstop(path_index);
 	p_path->status = DCAM_ST_STOP;
 	p_path->valide = 0;
+	p_path->sof_cnt = 0;
 	_dcam_frm_clear(path_index);
 
 	spin_unlock_irqrestore(&dcam_lock, flag);
@@ -3203,6 +3205,7 @@ LOCAL int32_t _dcam_path_set_next_frm(enum dcam_path_index path_index, uint32_t 
 	}
 
 	DCAM_TRACE("DCAM: next %d y 0x%x uv 0x%x \n", path->output_frame_count, frame.yaddr, frame.uaddr);
+
 	if (0x0 == frame.yaddr || 0x0 == frame.uaddr) {
 		pr_err("DCAM: error addr y 0x%x uv 0x%x\n", frame.yaddr, frame.uaddr);
 		rtn = DCAM_RTN_PATH_NO_MEM;
@@ -3211,7 +3214,7 @@ LOCAL int32_t _dcam_path_set_next_frm(enum dcam_path_index path_index, uint32_t 
 	} else {
 		REG_WR(yuv_reg[0], frame.yaddr);
 		if (((DCAM_YUV400 > path->output_format) && (DCAM_PATH_IDX_0 != path_index)) ||
-			((DCAM_OUTPUT_YUV420 == path->output_format) && (DCAM_PATH_IDX_0 == path_index))) {
+				((DCAM_OUTPUT_YUV420 == path->output_format) && (DCAM_PATH_IDX_0 == path_index))) {
 			REG_WR(yuv_reg[1], frame.uaddr);
 			if (DCAM_YUV420_3FRAME == path->output_format) {
 				REG_WR(yuv_reg[2], frame.vaddr);

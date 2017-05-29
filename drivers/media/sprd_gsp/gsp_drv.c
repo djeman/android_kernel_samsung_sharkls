@@ -1202,6 +1202,7 @@ ERROR_EXIT2:
     return ret;
 }
 
+
 static int32_t gsp_drv_remove(struct platform_device *dev)
 {
     gsp_context_t *gspCtx;

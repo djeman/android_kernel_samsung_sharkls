@@ -39,6 +39,7 @@ extern unsigned long sprd_adi_phys;
 #define REGS_PMU_APB_BASE	SPRD_PMU_BASE
 #define REGS_AON_CLK_BASE	SPRD_AONCKG_BASE
 #define REGS_AON_CLK_CORE_BASE	SPRD_AONCKG_BASE
+#define REGS_AGCP_AHB_BASE	SPRD_AGCPAHB_BASE
 //#define REGS_AON_CLK_BASE	SPRD_AON_CLK_CORE_BASE
 #define REGS_AP_CLK_BASE	SPRD_APBCKG_BASE
 #define REGS_AP_CLK_CORE_BASE	SPRD_APBCKG_BASE
@@ -50,23 +51,49 @@ extern unsigned long sprd_adi_phys;
 #define REGS_AHB_BASE		(SPRD_AHB_BASE  + 0x200)
 #define SPRD_MISC_BASE		SPRD_ADI_BASE
 
+#if defined(CONFIG_ADIE_SC2731)
+#define ANA_PWM_BASE		(SPRD_ADISLAVE_BASE + 0x20 )
+#define ANA_TIMER_BASE		(SPRD_ADISLAVE_BASE + 0x40 )
+#define ANA_FSCHG_BASE		(SPRD_ADISLAVE_BASE + 0x60 )
+#define ANA_WDG_BASE		(SPRD_ADISLAVE_BASE + 0x80 )
+#define ANA_CHGWDG_BASE		(SPRD_ADISLAVE_BASE + 0xC0 )
+#define ANA_TYPEC_BASE		(SPRD_ADISLAVE_BASE + 0x100 )
+#define ANA_INTC_BASE	(SPRD_ADISLAVE_BASE + 0x140 )
+#define ANA_CAL_BASE	(SPRD_ADISLAVE_BASE + 0x180 )
+#define ANA_AUDIFA_BASE	(SPRD_ADISLAVE_BASE + 0x1C0 )
+#define ANA_BTLC_BASE	(SPRD_ADISLAVE_BASE + 0x200 )
+#define ANA_FLASH_BASE	(SPRD_ADISLAVE_BASE + 0x240 )
+#define ANA_RTC_BASE		(SPRD_ADISLAVE_BASE + 0x280 )
+#define ANA_EIC_BASE		(SPRD_ADISLAVE_BASE + 0x300 )
+#define ANA_EFS_BASE		(SPRD_ADISLAVE_BASE + 0x380 )
+#define ANA_THM_BASE		(SPRD_ADISLAVE_BASE + 0x400 )
+#define ANA_ADC_BASE		(SPRD_ADISLAVE_BASE + 0x480 )
+#define ANA_PIN_BASE		(SPRD_ADISLAVE_BASE + 0x600 )
+#define ANA_AUDCFGA_BASE	(SPRD_ADISLAVE_BASE + 0x700 )
+#define ANA_AUDDIG_BASE	(SPRD_ADISLAVE_BASE + 0x800 )
+#define ANA_BIF_BASE	(SPRD_ADISLAVE_BASE + 0x900 )
+#define ANA_FGU_BASE	(SPRD_ADISLAVE_BASE + 0xA00 )
+#define ANA_REGS_GLB_BASE	(REGS_ADISLAVE_BASE + 0xC00)
+#else
 #define ANA_PWM_BASE		(SPRD_ADISLAVE_BASE + 0x20 )
 #define ANA_WDG_BASE		(SPRD_ADISLAVE_BASE + 0x40 )
 #define ANA_RTC_BASE		(SPRD_ADISLAVE_BASE + 0x80 )
 #define ANA_EIC_BASE		(SPRD_ADISLAVE_BASE + 0x100 )
 #define ANA_PIN_BASE		(SPRD_ADISLAVE_BASE + 0x180 )
+#define ANA_EFS_BASE		(SPRD_ADISLAVE_BASE + 0x200 )
 #define ANA_THM_BASE		(SPRD_ADISLAVE_BASE + 0x280 )
 #define ADC_BASE		(SPRD_ADISLAVE_BASE + 0x300 )
-#define ANA_CTL_INT_BASE	(SPRD_ADISLAVE_BASE + 0x380 )
+#define ANA_INTC_BASE	(SPRD_ADISLAVE_BASE + 0x380 )
 #define ANA_BTLC_INT_BASE	(SPRD_ADISLAVE_BASE + 0x3c0 )
 #define ANA_AUDIFA_INT_BASE	(SPRD_ADISLAVE_BASE + 0x400 )
 #define ANA_GPIO_INT_BASE	(SPRD_ADISLAVE_BASE + 0x480 )
-#define ANA_FPU_INT_BASE	(SPRD_ADISLAVE_BASE + 0x500 )
+#define ANA_FGU_BASE	(SPRD_ADISLAVE_BASE + 0x500 )
 #define ANA_AUDCFGA_INT_BASE	(SPRD_ADISLAVE_BASE + 0x600 )
 #define ANA_HDT_INT_BASE	(SPRD_ADISLAVE_BASE + 0x700 )
 #define ANA_CTL_GLB_BASE	(SPRD_ADISLAVE_BASE + 0x800 )
-#define REGS_ADC_BASE		(REGS_ADISLAVE_BASE + 0x300)
+#define ANA_ADC_BASE		(REGS_ADISLAVE_BASE + 0x300)
 #define ANA_REGS_GLB_BASE	(REGS_ADISLAVE_BASE + 0x800)
+#endif
 
 #ifdef CONFIG_64BIT
 #define SPRD_DEV_P2V(paddr)	(paddr + io_addr_sprd.base)
@@ -149,9 +176,15 @@ static inline unsigned long SPRD_DEV_V2P(vaddr)
 #include "./chip_x30g/__regs_ana_sc2713s_glb.h"
 #endif
 #if defined(CONFIG_ARCH_SCX30G2)
+#if defined(CONFIG_ARCH_SCX30G3)
+#include "./chip_x30g/__regs_aon_apb_tshark3.h"
+#include "./chip_x30g/__regs_pmu_apb_tshark3.h"
+#include "./chip_x30g/__regs_crypto_apb.h"
+#else
 #include "./chip_x30g/__regs_aon_apb_tshark2.h"
-#include "./chip_x30g/__regs_mm_ahb_rf_tshark2.h"
 #include "./chip_x30g/__regs_pmu_apb_tshark2.h"
+#endif
+#include "./chip_x30g/__regs_mm_ahb_rf_tshark2.h"
 #include "./chip_x30g/__regs_codec_ahb.h"
 #else
 #include "./chip_x30g/__regs_aon_apb.h"
@@ -226,7 +259,27 @@ static inline unsigned long SPRD_DEV_V2P(vaddr)
 
 #define REG_AON_APB_CHIP_ID0	REG_AON_APB_PROJ_ID_0
 #define REG_AON_APB_CHIP_ID1	REG_AON_APB_PROJ_ID_1
-
+	#elif defined(CONFIG_ARCH_WHALE)
+		#include "./chip_whale/__regs_sc2731_ana_glb.h"
+		#include "./chip_whale/__regs_ana_apb.h"
+		#include "./chip_whale/__regs_aon_apb.h"
+		#include "./chip_whale/__regs_aon_dbg_apb.h"
+		#include "./chip_whale/__regs_aon_sec_apb.h"
+		#include "./chip_whale/__regs_ap_ahb.h"
+		#include "./chip_whale/__regs_ap_apb.h"
+		#include "./chip_whale/__regs_pmu_apb.h"
+		#include "./chip_whale/__regs_pub0_apb.h"
+		#include "./chip_whale/__regs_pub1_apb.h"
+                #include "./chip_whale/__regs_vsp_sys_ahb.h"
+                #include "./chip_whale/__regs_vsp_clk.h"
+		#include "./chip_whale/__regs_cam_sys_ahb.h"
+		#include "./chip_whale/__regs_cam_clk.h"
+		#include "./chip_whale/__regs_disp_sys_ahb.h"
+		#include "./chip_whale/__regs_ap_clk.h"
+		#include "chip_whale/__regs_aon_apb.h"
+		#include "./chip_whale/__regs_agcp_ahb.h"
+#define REG_AON_APB_CHIP_ID0	REG_AON_APB_AON_CHIP_ID0
+#define REG_AON_APB_CHIP_ID1	REG_AON_APB_AON_CHIP_ID1
 	#elif defined(CONFIG_ARCH_SCX20L)
 		#include "./chip_x20l/__regs_ana_sc2723_glb.h"
 		#include "./chip_x20l/__regs_ada_apb_rf.h"

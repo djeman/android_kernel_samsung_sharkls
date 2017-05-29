@@ -31,7 +31,11 @@ struct sprd_otp_device {
 	struct sprd_otp_operations *ops;
 	struct list_head list;
 };
+#if defined(CONFIG_ADIE_SC2731)
+#define BITSINDEX(b, o)	( (b) * 16 + (o) )
+#else
 #define BITSINDEX(b, o)	( (b) * 8 + (o) )
+#endif
 
 int sprd_efuse_init(void);
 int sprd_adie_efuse_init(void);

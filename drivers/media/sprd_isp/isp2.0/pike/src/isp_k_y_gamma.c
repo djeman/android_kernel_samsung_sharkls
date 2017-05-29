@@ -37,7 +37,7 @@ static int32_t isp_k_pingpang_yuv_ygamma(struct coordinate_xy *nodes,
 
 	p_nodes = nodes;
 
-		ybuf_addr = ISP_YGAMMA_BUF0_CH0;
+	ybuf_addr = ISP_YGAMMA_BUF0_CH0;
 
 	if (ISP_YUV_YGAMMA_BUF0 == isp_private->yuv_ygamma_buf_id) {
 		buf_id = ISP_YUV_YGAMMA_BUF0;

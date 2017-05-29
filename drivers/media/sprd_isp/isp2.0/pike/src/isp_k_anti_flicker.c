@@ -18,41 +18,13 @@
 #include "isp_reg.h"
 #include "isp_drv.h"
 
-static int32_t isp_k_afl_param_update(struct isp_k_private *isp_private)
-{
-	int32_t ret = 0;
-	uint32_t addr = 0;
-#ifndef CONFIG_64BIT
-	void *buf_ptr = (void *)isp_private->yiq_antiflicker_buf_addr;
-#endif
-	uint32_t buf_len = isp_private->yiq_antiflicker_len;
-
-	if((0x00 != isp_private->yiq_antiflicker_buf_addr) && (0x00 != isp_private->yiq_antiflicker_len)) {
-
-#ifndef CONFIG_64BIT
-		dmac_flush_range(buf_ptr, buf_ptr + buf_len);
-		outer_flush_range(__pa(buf_ptr), __pa(buf_ptr) + buf_len);
-#endif
-		addr = (uint32_t)__pa(isp_private->yiq_antiflicker_buf_addr);
-
-		REG_WR(ISP_ANTI_FLICKER_DDR_INIT_ADDR, addr);
-	}
-
-	return ret;
-}
-
 static int32_t isp_k_afl_statistic(struct isp_io_param *param, struct isp_k_private *isp_private)
 {
 	int32_t ret = 0;
 
-	if((0x00 != isp_private->yiq_antiflicker_buf_addr) && (0x00 != param->property_param) \
-		&& (0x00 != isp_private->yiq_antiflicker_len) ) {
-
-		ret = copy_to_user(param->property_param, (void *)isp_private->yiq_antiflicker_buf_addr, isp_private->yiq_antiflicker_len);
-		if (0 != ret) {
-			ret = -1;
-			printk("isp_k_afl_statistic: copy_to_user error, ret = 0x%x\n", (uint32_t)ret);
-		}
+	if(0x00 == isp_private->anti_flicker_buf_phys_addr) {
+		ret = -1;
+		printk("isp_k_afl_statistic: buffer is null error\n");
 	}
 
 	return ret;
@@ -106,10 +78,24 @@ static int32_t isp_k_anti_flicker_block(struct isp_io_param *param, struct isp_k
 
 	REG_MWR(ISP_ANTI_FLICKER_COL_POS, 0xFFFF , afl_info.start_col);
 
-	REG_MWR(ISP_ANTI_FLICKER_COL_POS,  0xFFFF << 16, afl_info.end_col << 16);
+	REG_MWR(ISP_ANTI_FLICKER_COL_POS, 0xFFFF << 16, afl_info.end_col << 16);
 
-	isp_k_afl_param_update(isp_private);
+	REG_WR(ISP_ANTI_FLICKER_DDR_INIT_ADDR, isp_private->anti_flicker_buf_phys_addr);
 
+	return ret;
+}
+
+static int32_t isp_k_anti_flicker_transaddr(struct isp_io_param *param,
+			struct isp_k_private *isp_private)
+{
+	int32_t ret = 0;
+	uint32_t addr = 0;
+
+	ret = copy_from_user((void *)&addr, param->property_param, sizeof(uint32_t));
+
+	isp_private->anti_flicker_buf_phys_addr = addr;
+
+	printk("anti flicker phys addr 0x%x,\n",isp_private->anti_flicker_buf_phys_addr);
 	return ret;
 }
 
@@ -137,6 +123,9 @@ int32_t isp_k_cfg_anti_flicker(struct isp_io_param *param, struct isp_k_private 
 	case ISP_PRO_ANTI_FLICKER_BYPASS:
 		ret = isp_k_afl_bypass(param);
 		break;
+	case ISP_PRO_ANTI_FLICKER_TRANSADDR:
+		ret = isp_k_anti_flicker_transaddr(param, isp_private);
+		break;
 	default:
 		printk("isp_k_cfg_anti_flicker: fail cmd id:%d, not supported.\n", param->property);
 		break;
@@ -144,3 +133,4 @@ int32_t isp_k_cfg_anti_flicker(struct isp_io_param *param, struct isp_k_private 
 
 	return ret;
 }
+

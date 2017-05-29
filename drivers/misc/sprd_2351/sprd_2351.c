@@ -21,7 +21,7 @@
 #include <linux/mutex.h>
 #include <linux/regulator/consumer.h>
 #include <soc/sprd/regulator.h>
-
+#include <linux/sipc.h>
 static struct sprd_2351_data rfspi;
 
 static int s_gpio_ctrl_num = 0;
@@ -272,6 +272,7 @@ int rf2351_vddwpa_ctrl_power_enable(int flag)
         }
         f_enabled = 0;
     }
+
     return 0;
 }
 
@@ -300,6 +301,93 @@ int sprd_put_rf2351_ops(struct sprd_2351_interface **rf2351_ops)
 	return 0;
 }
 EXPORT_SYMBOL(sprd_put_rf2351_ops);
+
+#if 0
+
+#ifdef CONFIG_ARCH_SCX30G
+#define SCI_IOMAP_BASE	0xF5000000
+
+#define SCI_IOMAP(x)	(SCI_IOMAP_BASE + (x))
+#define SPRD_PMU_BASE			SCI_IOMAP(0x230000)
+#define WCN_REG_CLK_ADDR                               (SPRD_PMU_BASE + 0x68)
+#else
+#define SCI_IOMAP_BASE	0xF5000000
+
+#define SCI_IOMAP(x)	(SCI_IOMAP_BASE + (x))
+#define SPRD_PMU_BASE			SCI_IOMAP(0x230000)
+#define WCN_REG_CLK_ADDR                               (SPRD_PMU_BASE + 0x60)
+#endif
+#endif
+#ifdef CONFIG_ARCH_SCX30G
+/*
+return      1:cp2 work
+	        0:cp2 not work
+*/
+int get_cp2_state()
+{
+	int reg_value = 0;
+	/* cp2 force shutdown */
+	//reg_value = sci_glb_read(WCN_REG_CLK_ADDR, 0x02000000);
+	printk("[sprd_2351]:reg_value is 0x%x\n",reg_value);
+	if(reg_value)
+	{
+		printk("[sprd_2351]:cp2 shutdown\n");
+		return 0;
+	}else {
+		return 1;
+	}
+}
+EXPORT_SYMBOL(get_cp2_state);
+
+/*
+return      1:ok
+	        little than 0:fail
+cam status: 1:on
+  			0:off
+*/
+int sprd_switch_cp2_clk(int cam_status)
+{
+	char ret_buf[20]={0};
+	char cmd_buf[20]={0};
+	int reg_value = 0;
+	int send_len=0,ret_len=0;
+	if(!get_cp2_state())
+		return 0;
+	
+	if(cam_status) //on
+		sprintf((char *)cmd_buf, "at+switchclk=1?\r");
+	else //off
+		sprintf((char *)cmd_buf, "at+switchclk=0?\r");
+
+	send_len = sbuf_write(SIPC_ID_WCN, SMSG_CH_PIPE, 12,(char *)cmd_buf, strlen(cmd_buf), msecs_to_jiffies(5000));
+	if(send_len< 0){
+		printk("[sprd_2351]cmd [%s] sbuf_write error!\n",cmd_buf);
+		return send_len;
+	} else if (send_len != (strlen(cmd_buf))) {
+		printk("[sprd_2351]cmd [%s] sbuf_write not completely with send len %d\n",cmd_buf, send_len);
+		return -EIO;
+	}
+
+	ret_len = sbuf_read(SIPC_ID_WCN, SMSG_CH_PIPE, 12,ret_buf,20, msecs_to_jiffies(5000));
+	if(ret_len < 14){
+		printk("[sprd_2351]cmd [%s] sbuf_read error, ret_len is %d\n",cmd_buf,ret_len);
+		return -EIO;
+	}
+
+
+	if((strncmp(ret_buf,"+ok:switch clk",14) == 0) || (strncmp(ret_buf,"+ok:restore clk",14) == 0)){	
+		printk("[sprd_2351] sprd_switch_cp2_clk end,ret_buf is %s\n",ret_buf);
+		return 1;
+	}
+	else {
+		printk("[sprd_2351] sprd_switch_cp2_clk error,ret_buf is %s\n",ret_buf);
+		return -1;
+	}
+	
+}
+EXPORT_SYMBOL(sprd_switch_cp2_clk);
+
+#endif
 
 #ifdef CONFIG_OF
 static struct rf2351_addr

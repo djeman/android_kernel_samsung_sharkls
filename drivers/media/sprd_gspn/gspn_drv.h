@@ -44,6 +44,8 @@
 #include <linux/of_address.h>
 #include <linux/device.h>
 #endif
+#include <linux/dma-buf.h>
+
 
 #include <soc/sprd/hardware.h>
 #include <soc/sprd/sci_glb_regs.h>
@@ -54,7 +56,6 @@
 
 #include <video/gspn_user_cfg.h>
 #include "gspn_register_cfg.h"
-#include "../../staging/android/ion/sprd/sprd_fence.h"
 
 
 #ifdef CONFIG_OF
@@ -65,9 +66,17 @@
 #define GSPN_CLOCK_PARENT1      ("clk_153m6")
 #define GSPN_CLOCK_PARENT0      ("clk_96m")
 #endif
-#define GSPN_CLOCK_NAME         ("clk_gsp1")
-#define GSPN_EMC_CLOCK_PARENT_NAME      ("clk_aon_apb")
-#define GSPN_EMC_CLOCK_NAME             ("clk_gsp_emc")
+#define GSPN0_CLOCK_NAME         ("clk_gsp0")
+#define GSPN1_CLOCK_NAME         ("clk_gsp1")
+#define GSPN0_MMU_CLOCK_NAME         ("clk_gsp0_mmu_eb")
+#define GSPN1_MMU_CLOCK_NAME         ("clk_gsp1_mmu_eb")
+#define GSPN_MTX_CLOCK_NAME             ("clk_gsp_mtx_eb")
+#define GSPN_NIU_CLOCK_NAME      ("clk_gsp_niu")
+#define GSPN_DISP_CLOCK_NAME      ("clk_disp_eb")
+#define GSPN_MMU_CLOCK_PARENT_NAME         ("clk_gsp_mmu_parent")
+#define GSPN_MTX_CLOCK_PARENT_NAME      ("clk_gsp_mtx_parent")
+#define GSPN_NIU_CLOCK_PARENT_NAME      ("clk_niu_parent")
+#define GSPN_EMC_CLOCK_NAME      ("clk_aon_apb")
 
 #define MEM_OPS_ADDR_ALIGN_MASK (0x7UL)
 
@@ -130,12 +139,20 @@ typedef struct { //GSPN_KCMD_INFO_T
     uint32_t sub_cmd_total;
     uint32_t sub_cmd_done_cnt;
 
-
-    //async/sync relative
-    uint32_t *done_cnt;//defined in ioctl,  init it to 0, pass addr of it to every KCMD, when all parts process over, add it 1
-    struct list_head list_frame;// if cmd[n] is sync, cmd list belong same frame, user thread return when all these cmds process over
-    struct sync_fence *acq_fence[GSPN_FENCE_MAX_PER_CMD];// wait fence before process
+    /*async/sync relative*/
+    /*defined in ioctl,  init it to 0,
+     * pass addr of it to every KCMD,
+     * when all parts process over, add it 1*/
+    uint32_t *done_cnt;
+    /*if cmd[n] is sync, cmd list belong same frame,
+     * user thread return when all these cmds process over*/
+    struct list_head list_frame;
+    struct sync_fence *acq_fence[GSPN_FENCE_MAX_PER_CMD];/*wait fence before process*/
     uint32_t acq_fence_cnt;
+    struct sync_fence *rls_fence[GSPN_FENCE_MAX_PER_CMD];/*wait fence before process*/
+    uint32_t rls_fence_cnt;
+    int mmu_id;
+    struct timespec start_time;/*start from trigger, used to timeout judgment*/
 } GSPN_KCMD_INFO_T;
 
 
@@ -150,18 +167,35 @@ typedef struct GSPN_CORE_T {
     uint32_t auto_gate_bit;
     uint32_t force_gate_bit;
     uint32_t emc_en_bit;
+    uint32_t noc_auto_bit;
+    uint32_t noc_force_bit;
+    uint32_t mtx_auto_bit;
+    uint32_t mtx_force_bit;
+    uint32_t mtx_en_bit;
     uint32_t core_id;// core id, 0 1
     uint32_t interrupt_id;// global interrupt id
     GSPN_CORE_STATUS_E status;
     GSPN_KCMD_INFO_T *current_kcmd;// current processing cmd, for signal fence
     int32_t current_kcmd_sub_cmd_index;// if the kcmd have sub cmd, sub cmd index; if have no sub cmd, set to -1
-    struct timespec start_time;// start from trigger, used to timeout judgment
 
     GSPN_CMD_REG_T *cmdq;//[GSPN_CMDQ_ARRAY_MAX];
-    struct clk *emc_clk;
     struct clk *gspn_clk;
-    struct clk *emc_clk_parent;
+    struct clk *mmu_clk;
+    struct clk *mtx_clk;
+    struct clk *niu_clk;
+    struct clk *disp_clk;
     struct clk *gspn_clk_parent;
+    struct clk *mmu_clk_parent;
+    struct clk *mtx_clk_parent;
+    struct clk *niu_clk_parent;
+    struct clk *emc_clk;
+
+    struct gspn_sync_timeline *timeline;
+    struct semaphore fence_create_sema;
+    /*protect kcmd_fifo relative access*/
+    struct semaphore fill_list_sema;
+    struct list_head fill_list;
+    uint32_t fill_list_cnt;
 } GSPN_CORE_T;
 
 
@@ -176,7 +210,7 @@ typedef struct {
     uint32_t core_cnt;// total core count
     uint32_t free_cnt;
 
-    //dissociation_list: not in empty-list or fill-list
+    /*dissociation_list: not in empty-list or fill-list*/
     struct list_head dissociation_list;
 } GSPN_CORE_MNG_T;
 
@@ -223,11 +257,6 @@ typedef struct { //GSPN_CONTEXT_T
     wait_queue_head_t empty_list_wq;//when empty_list_cnt increase, wake_up this wait queue.
     wait_queue_head_t sync_done_wq;//when sync KCMD done, wake_up this wait queue.
 
-
-    struct list_head fill_list;// put to tail, get from head
-    struct semaphore fill_list_sema;// protect kcmd_fifo relative access
-    uint32_t fill_list_cnt;
-
     GSPN_CORE_MNG_T core_mng;
     long long total_cmd;// for debug, record how many cmd have we process from boot
 
@@ -235,64 +264,81 @@ typedef struct { //GSPN_CONTEXT_T
     struct semaphore wake_work_thread_sema;// wake up work_thread sema
     uint32_t timeout;// work thread wait event timeout, in us unit
 
-
-    struct user_timeline_data *timeline;
     struct semaphore fence_create_sema;// signal fence will change timeline,
     volatile uint32_t remain_async_cmd_cnt;// async cmd count, used as sprd_fence_create() life_value
 
 } GSPN_CONTEXT_T;
 
-extern GSPN_CONTEXT_T *g_gspnCtx;
+extern GSPN_CONTEXT_T *g_gspn_ctx;
 
 #define GSPN_TAG    "GSPN"
 
-//tag printk
+/*tag printk*/
 #define GSPN_PRINTK(fmt, ...)\
         printk(GSPN_TAG" %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__)
 
-//normal info
+/*normal info*/
 #define GSPN_LOGI(fmt, ...)\
-    if(unlikely(g_gspnCtx->log_level&(1<<(GSPN_LOG_INFO)))) {\
-        printk(GSPN_TAG" %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
-    } else {\
-        pr_debug(GSPN_TAG" %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
-    }
+    do {\
+        if(unlikely(g_gspn_ctx->log_level&(1<<(GSPN_LOG_INFO)))) {\
+            pr_err(GSPN_TAG" %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
+        } else {\
+            pr_debug(GSPN_TAG" %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
+        }\
+    } while(0)
 
-//warning info
+/*debug info*/
+#define GSPN_LOGD(fmt, ...)\
+    do {\
+        if(unlikely(g_gspn_ctx->log_level&(1<<(GSPN_LOG_DBG)))) {\
+            pr_err(GSPN_TAG" %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
+        } else {\
+            pr_debug(GSPN_TAG" %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
+        }\
+    } while(0)
+
+/*warning info*/
 #define GSPN_LOGW(fmt, ...)\
-    if(unlikely(g_gspnCtx->log_level&(1<<(GSPN_LOG_WARN)))) {\
-        printk(GSPN_TAG" WARN %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
-    } else {\
-        pr_warn(GSPN_TAG" WARN %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
-    }
+    do {\
+        if(unlikely(g_gspn_ctx->log_level&(1<<(GSPN_LOG_WARN)))) {\
+            pr_err(GSPN_TAG" WARN %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
+        } else {\
+            pr_warn(GSPN_TAG" WARN %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
+        }\
+    } while(0)
 
-//err info
+/*err info*/
 #define GSPN_LOGE(fmt, ...)\
-    if(unlikely(g_gspnCtx->log_level&(1<<(GSPN_LOG_ERROR)))) {\
-        printk(GSPN_TAG" ERR %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
-    } else {\
-        pr_err(GSPN_TAG" ERR %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
-    }
+    do {\
+        if(unlikely(g_gspn_ctx->log_level&(1<<(GSPN_LOG_ERROR)))) {\
+            pr_err(GSPN_TAG" ERR %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
+        } else {\
+            pr_err(GSPN_TAG" ERR %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
+        }\
+    } while(0)
 
 
-//performance info
+/*performance info*/
 #define GSPN_LOGP(fmt, ...)\
-    if(unlikely(g_gspnCtx->log_level&(1<<(GSPN_LOG_PERF)))) {\
-        printk(GSPN_TAG" %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
-    } else {\
-        pr_debug(GSPN_TAG" %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
-    }
+    do {\
+        if(unlikely(g_gspn_ctx->log_level&(1<<(GSPN_LOG_PERF)))) {\
+            pr_err(GSPN_TAG" %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
+        } else {\
+            pr_debug(GSPN_TAG" %s[%d] " pr_fmt(fmt),__func__,__LINE__,##__VA_ARGS__);\
+        }\
+    } while(0)
 
 #define GSPN_PUT_FENCE_BY_FD(fd)    if((fd)>=0) {sync_fence_put(sync_fence_fdget(fd)); (fd) = -1;}
-#define GSPN_PUT_CMD_ACQ_FENCE_BY_FD(pCMD)\
-                GSPN_PUT_FENCE_BY_FD((pCMD)->l0_info.acq_fen_fd);\
-                GSPN_PUT_FENCE_BY_FD((pCMD)->l1_info.acq_fen_fd);\
-                GSPN_PUT_FENCE_BY_FD((pCMD)->l2_info.acq_fen_fd);\
-                GSPN_PUT_FENCE_BY_FD((pCMD)->l3_info.acq_fen_fd);\
-                GSPN_PUT_FENCE_BY_FD((pCMD)->des1_info.acq_fen_fd);\
-                GSPN_PUT_FENCE_BY_FD((pCMD)->des2_info.acq_fen_fd)
+#define GSPN_PUT_CMD_ACQ_FENCE_BY_FD(cmd)\
+                GSPN_PUT_FENCE_BY_FD((cmd)->l0_info.acq_fen_fd);\
+                GSPN_PUT_FENCE_BY_FD((cmd)->l1_info.acq_fen_fd);\
+                GSPN_PUT_FENCE_BY_FD((cmd)->l2_info.acq_fen_fd);\
+                GSPN_PUT_FENCE_BY_FD((cmd)->l3_info.acq_fen_fd);\
+                GSPN_PUT_FENCE_BY_FD((cmd)->des1_info.acq_fen_fd);\
+                GSPN_PUT_FENCE_BY_FD((cmd)->des2_info.acq_fen_fd)
 
-#define GSPN_ALL_CORE_FREE(gspnCtx) (gspnCtx->core_mng.core_cnt == gspnCtx->core_mng.free_cnt)
+#define GSPN_ALL_CORE_FREE(gspnCtx)\
+    ((gspnCtx)->core_mng.core_cnt == (gspnCtx)->core_mng.free_cnt)
 
 int gspn_work_thread(void *data);
 GSPN_ERR_CODE_E gspn_put_list_to_empty_list(GSPN_CONTEXT_T *gspnCtx, struct list_head *KCMD_list);

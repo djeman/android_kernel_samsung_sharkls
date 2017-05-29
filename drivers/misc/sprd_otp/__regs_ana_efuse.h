@@ -22,6 +22,17 @@
 #define ANA_REGS_EFUSE
 
 /* registers definitions for controller ANA_REGS_EFUSE */
+#ifdef CONFIG_ADIE_SC2731
+#define ANA_REG_EFUSE_GLB_CTRL          SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x0000)
+#define ANA_REG_EFUSE_DATA_RD           SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x0004)
+#define ANA_REG_EFUSE_DATA_WR           SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x0008)
+#define ANA_REG_EFUSE_BLOCK_INDEX       SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x000c)
+#define ANA_REG_EFUSE_MODE_CTRL         SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x0010)
+#define ANA_REG_EFUSE_STATUS            SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x0014)
+#define ANA_REG_EFUSE_WR_TIMING_CTRL    SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x0020)
+#define ANA_REG_EFUSE_RD_TIMING_CTRL    SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x0024)
+#define ANA_REG_EFUSE_EFUSE_DEB_CTRL    SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x0028)
+#else
 #define ANA_REG_EFUSE_GLB_CTRL          SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x0000)
 #define ANA_REG_EFUSE_DATA_RD           SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x0004)
 #define ANA_REG_EFUSE_DATA_WR           SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x0008)
@@ -31,6 +42,7 @@
 #define ANA_REG_EFUSE_WR_TIMING_CTRL    SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x0028)
 #define ANA_REG_EFUSE_RD_TIMING_CTRL    SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x002c)
 #define ANA_REG_EFUSE_EFUSE_DEB_CTRL    SCI_ADDR(ANA_REGS_EFUSE_BASE, 0x0030)
+#endif
 
 /* bits definitions for register ANA_REG_EFUSE_GLB_CTRL */
 /* Efuse SW programme enable.
@@ -41,10 +53,18 @@
 #define BITS_EFUSE_TYPE(_x_)            ( (_x_) << 1 & (BIT(1)|BIT(2)) )
 
 /* bits definitions for register ANA_REG_EFUSE_DATA_RD */
+#ifdef CONFIG_ADIE_SC2731
+#define BITS_EFUSE_DATA_RD(_x_)         ( (_x_) << 0 & (BIT(0)|BIT(1)|BIT(2)|BIT(3)|BIT(4)|BIT(5)|BIT(6)|BIT(7)|BIT(8)|BIT(9)|BIT(10)|BIT(11)|BIT(12)|BIT(13)|BIT(14)|BIT(15)) )
+#else
 #define BITS_EFUSE_DATA_RD(_x_)         ( (_x_) << 0 & (BIT(0)|BIT(1)|BIT(2)|BIT(3)|BIT(4)|BIT(5)|BIT(6)|BIT(7)) )
+#endif
 
 /* bits definitions for register ANA_REG_EFUSE_DATA_WR */
+#ifdef CONFIG_ADIE_SC2731
+#define BITS_EFUSE_DATA_WR(_x_)         ( (_x_) << 0 & (BIT(0)|BIT(1)|BIT(2)|BIT(3)|BIT(4)|BIT(5)|BIT(6)|BIT(7)|BIT(8)|BIT(9)|BIT(10)|BIT(11)|BIT(12)|BIT(13)|BIT(14)|BIT(15)) )
+#else
 #define BITS_EFUSE_DATA_WR(_x_)         ( (_x_) << 0 & (BIT(0)|BIT(1)|BIT(2)|BIT(3)|BIT(4)|BIT(5)|BIT(6)|BIT(7)) )
+#endif
 
 /* bits definitions for register ANA_REG_EFUSE_BLOCK_INDEX */
 #define BITS_READ_WRITE_INDEX(_x_)      ( (_x_) << 0 & (BIT(0)|BIT(1)|BIT(2)|BIT(3)|BIT(4)) )
@@ -64,6 +84,9 @@
 #define BIT_PGM_BUSY                    ( BIT(0) )
 #define BIT_READ_BUSY                   ( BIT(1) )
 #define BIT_STANDBY_BUSY                ( BIT(2) )
+#define BIT_GLOBAL_PROT					( BIT(3) )
+#define BIT_NORMAL_RD_DONE					( BIT(4) )
+
 
 /* bits definitions for register ANA_REG_EFUSE_WR_TIMING_CTRL */
 #define BITS_EFUSE_WR_TIMING(_x_)       ( (_x_) << 0 & (BIT(0)|BIT(1)|BIT(2)|BIT(3)|BIT(4)|BIT(5)|BIT(6)|BIT(7)|BIT(8)|BIT(9)|BIT(10)|BIT(11)|BIT(12)|BIT(13)) )

@@ -125,7 +125,6 @@ struct sprd_img_parm {
 	uint32_t                  shrink;
 	uint32_t                  index;
 	uint32_t                  need_isp;
-	uint32_t                  camera_id;
 	uint32_t                  is_reserved_buf;
 	uint32_t                  buf_flag;
 	struct sprd_img_rect      crop_rect;
@@ -165,7 +164,6 @@ struct sprd_img_sensor_if {
 
 struct sprd_img_frm_info {
 	uint32_t channel_id;
-	uint32_t width;
 	uint32_t height;
 	uint32_t length;
 	uint32_t sec;
@@ -282,6 +280,7 @@ struct sprd_flash_cfg_param {
 #define SPRD_IMG_IO_GET_TIME          _IOR(SPRD_IMG_IO_MAGIC, 18, struct sprd_img_time)
 #define SPRD_IMG_IO_CHECK_FMT         _IOWR(SPRD_IMG_IO_MAGIC, 19, struct sprd_img_format)
 #define SPRD_IMG_IO_SET_SHRINK        _IOW(SPRD_IMG_IO_MAGIC, 20, uint32_t)
+#define SPRD_IMG_IO_SET_FREQ_FLAG     _IOW(SPRD_IMG_IO_MAGIC, 21, uint32_t)
 #define SPRD_IMG_IO_CFG_FLASH         _IOW(SPRD_IMG_IO_MAGIC, 22, struct sprd_flash_cfg_param)
 
 /*

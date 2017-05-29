@@ -17,7 +17,7 @@ config OTP_SPRD_EFUSE
 
 config OTP_SPRD_ADIE_EFUSE
     tristate "Spreadtrum A-die eFuse/eMemory driver"
-    depends on ADIE_SC2723 || ADIE_SC2723S
+    depends on ADIE_SC2723 || ADIE_SC2723S || ADIE_SC2731
     default y
     help
       Say Y here to support spreadtrum adie efuse.

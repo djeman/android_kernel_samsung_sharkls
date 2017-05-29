@@ -629,9 +629,9 @@ int scale_k_start(struct scale_frame_param_t *cfg_ptr, struct scale_path_info *p
 
 	dcam_glb_reg_owr(SCALE_CTRL, (SCALE_FRC_COPY_BIT|SCALE_COEFF_FRC_COPY_BIT), DCAM_CONTROL_REG);
 	REG_MWR(SCALE_CFG, BIT_10 | BIT_9, 0);
-	REG_WR(SCALE_BURST_GAP, 0x4000);
 	REG_OWR(SCALE_REV_BURST_IN_CFG, SCALE_START_BIT);
-	printk("scale_k_start gap 0x%x \n", REG_RD(SCALE_BURST_GAP));
+	REG_WR(SCALE_BURST_GAP, 0x100000);
+	printk("scale_k_start\n");
 	return rtn;
 
 start_exit:

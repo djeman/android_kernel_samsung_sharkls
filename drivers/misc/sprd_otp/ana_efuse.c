@@ -34,16 +34,29 @@
 #include "sprd_otp.h"
 #include "__regs_ana_efuse.h"
 
-#define ANA_REGS_EFUSE_BASE             ( SPRD_ADISLAVE_BASE + 0x200 )
+
 
 #define EFUSE_BLOCK_MAX                 ( 32 )
+
+#define ANA_REGS_EFUSE_BASE             ( ANA_EFS_BASE )
+
+#ifdef CONFIG_ADIE_SC2731
+#define EFUSE_BLOCK_WIDTH               ( 16 )	/* bit counts */
+#else
 #define EFUSE_BLOCK_WIDTH               ( 8 )	/* bit counts */
+#endif
 
 static DEFINE_MUTEX(adie_efuse_mtx);
 
+#if 0
 void adie_efuse_workaround(void)
 {
-#define REG_ADI_GSSI_CFG0					(SPRD_ADI_PHYS + 0x1C)
+#ifdef CONFIG_ADIE_SC2731
+#define REG_ADI_GSSI_CFG0					(SPRD_ADI_PHYS + 0x20)
+#else
+#define REG_ADI_GSSI_CFG0					(SPRD_ADI_PHYS + 0x1c)
+#endif
+
 /** BIT_RF_GSSI_SCK_ALL_IN
    * 0: sclk auto gate
    * 1: sclk always on
@@ -52,7 +65,7 @@ void adie_efuse_workaround(void)
 	sci_glb_write(REG_ADI_GSSI_CFG0,
 		      BIT_RF_GSSI_SCK_ALL_IN, BIT_RF_GSSI_SCK_ALL_IN);
 }
-
+#endif
 static void adie_efuse_lock(void)
 {
 	mutex_lock(&adie_efuse_mtx);
@@ -90,12 +103,19 @@ static __inline int __adie_efuse_wait_clear(u32 bits)
 {
 	int ret = 0;
 	unsigned long timeout;
-
-	pr_debug("wait %x\n", sci_adi_read(ANA_REG_EFUSE_STATUS));
+	u32 bit_status = 1;
+        u32 val;
+	printk("wait %x\n", sci_adi_read(ANA_REG_EFUSE_STATUS));
 
 	/* wait for maximum of 3000 msec */
 	timeout = jiffies + msecs_to_jiffies(3000);
-	while (sci_adi_read(ANA_REG_EFUSE_STATUS) & bits) {
+	  while (bit_status) {
+		val = sci_adi_read(ANA_REG_EFUSE_STATUS);
+#ifdef CONFIG_ADIE_SC2731
+		bit_status = (~val)& bits;
+#else
+        bit_status = val & bits;
+#endif
 		if (time_after(jiffies, timeout)) {
 			WARN_ON(1);
 			ret = -ETIMEDOUT;
@@ -110,7 +130,7 @@ static u32 adie_efuse_read(int blk_index)
 {
 	u32 val = 0;
 
-	pr_debug("adie efuse read %d\n", blk_index);
+	printk("adie efuse read %d\n", blk_index);
 	adie_efuse_lock();
 	__adie_efuse_power_on();
 	/* enable adie_efuse module clk and power before */
@@ -119,19 +139,28 @@ static u32 adie_efuse_read(int blk_index)
 	   sci_adi_raw_write(ANA_REG_EFUSE_RD_TIMING_CTRL,
 	   BITS_EFUSE_RD_TIMING(0x20));
 	 */
-
+#ifdef CONFIG_ADIE_SC2731
+	if (IS_ERR_VALUE(__adie_efuse_wait_clear(BIT_STANDBY_BUSY)))
+		goto out;
+#endif
 	sci_adi_raw_write(ANA_REG_EFUSE_BLOCK_INDEX,
 			  BITS_READ_WRITE_INDEX(blk_index));
 	sci_adi_raw_write(ANA_REG_EFUSE_MODE_CTRL, BIT_RD_START);
-
+#ifdef CONFIG_ADIE_SC2731
+	if (IS_ERR_VALUE(__adie_efuse_wait_clear(BIT_NORMAL_RD_DONE)))
+		goto out;
+#else
 	if (IS_ERR_VALUE(__adie_efuse_wait_clear(BIT_READ_BUSY)))
 		goto out;
-
+#endif
 	val = sci_adi_read(ANA_REG_EFUSE_DATA_RD);
-
+#ifndef CONFIG_ADIE_SC2731
 	/* FIXME: reverse the otp value */
 	val = BITS_EFUSE_DATA_RD(~val);
-
+#endif
+#ifdef CONFIG_ADIE_SC2731
+	sci_adi_clr(ANA_REG_EFUSE_STATUS, BIT_NORMAL_RD_DONE);
+#endif
 out:
 	__adie_efuse_power_off();
 	adie_efuse_unlock();
@@ -183,7 +212,11 @@ static ssize_t adie_efuse_block_dump(struct device *dev,
 	char *p = buf;
 
 	p += sprintf(p, "adie efuse blocks dump:\n");
+#ifdef CONFIG_ADIE_SC2731
+	p += sprintf(p, "    15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0");
+#else
 	p += sprintf(p, "    7 6 5 4 3 2 1 0");
+#endif
 	for (idx = 0; idx < EFUSE_BLOCK_MAX; idx++) {
 		u32 val = __adie_efuse_read(idx);
 		p += sprintf(p, "\n%02d  ", idx);

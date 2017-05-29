@@ -356,6 +356,7 @@ struct dcam_frame {
 	uint32_t               vaddr;
 	struct dcam_frame      *prev;
 	struct dcam_frame      *next;
+	uint32_t               zsl_private;
 };
 
 struct dcam_get_path_id {

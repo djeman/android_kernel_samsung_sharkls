@@ -192,7 +192,7 @@ static long _isp_kernel_ioctl( struct file *fl, unsigned int cmd, unsigned long 
 			}
 			break;
 
-			case ISP_IO_SETCLK: 
+			case ISP_IO_SETCLK:
 			ISP_PRINT(" isp_k:ioctl set clock start \n");
 			break;
 

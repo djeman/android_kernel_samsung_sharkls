@@ -119,7 +119,6 @@ extern "C" {
 #define EcgInSufficientWorkPadSize		 	( ECgCommonErrorBase - 108 )
 #define ECgSatelliteOverflow             	( ECgCommonErrorBase - 109 )
 #define ECgLastItem						 	( ECgCommonErrorBase - 110 )
-#define ECgErrorData                                                          ( ECgCommonErrorBase - 111 )
 
 
 typedef S32 TCgReturnCode;

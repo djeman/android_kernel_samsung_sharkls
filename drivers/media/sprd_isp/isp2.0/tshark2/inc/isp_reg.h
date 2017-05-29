@@ -17,7 +17,7 @@
 #else
 #include <soc/sprd/irqs.h>
 #endif
-#include "parse_hwinfo_tshark2.h"
+#include "parse_hwinfo.h"
 
 #define ISP_BASE_ADDR                      ISP_BASE
 
@@ -140,6 +140,9 @@
 #define ISP_COMMON_LBUF_OFFSET1            (ISP_BASE_ADDR+0x0748UL)
 #define ISP_COMMON_3A_CTRL1                (ISP_BASE_ADDR+0x074CUL)
 #define ISP_COMMON_RESERVED0               (ISP_BASE_ADDR+0x0750UL)
+/*only for whale*/
+#define ISP_COMMON_RESERVED1               (ISP_BASE_ADDR+0x0754UL)
+#define ISP_COMMON_RESERVED2               (ISP_BASE_ADDR+0x0758UL)
 
 /*isp sub block: Pre Global Gain*/
 #define ISP_PGG_STATUS                     (ISP_BASE_ADDR+0x1000UL)

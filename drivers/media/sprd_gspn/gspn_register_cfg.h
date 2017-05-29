@@ -24,7 +24,7 @@ regiter opertion macro define
 #define REG_GET(reg)                (*(volatile uint32_t*)(reg))
 #define REG_SET(reg,value)          (*(volatile uint32_t*)(reg) = (value))
 #define REG_OR(reg,value)           (*(volatile uint32_t*)(reg) |= (value))
-#define REG_CLR(reg,value)			(*(volatile uint32_t*)(reg) &= (~(value)))
+#define REG_CLR(reg,value)          (*(volatile uint32_t*)(reg) &= (~(value)))
 
 
 //#define CONFIG_MINI_CODE
@@ -190,10 +190,17 @@ regiter opertion macro define
 
 #else
 
-#define GSPN_AUTO_GATE_ENABLE(core_mng) {\
+#define GSPN_CLK_GATE_ENABLE(core_mng) {\
     int i = 0;\
     while(i < (core_mng)->core_cnt) {\
         REG_OR((core_mng)->cores[i].auto_gate_reg_base,(core_mng)->cores[i].auto_gate_bit);\
+        REG_OR((core_mng)->cores[i].auto_gate_reg_base,(core_mng)->cores[i].noc_auto_bit);\
+        REG_OR((core_mng)->cores[i].auto_gate_reg_base,(core_mng)->cores[i].noc_force_bit);\
+        REG_OR((core_mng)->cores[i].auto_gate_reg_base,(core_mng)->cores[i].mtx_auto_bit);\
+        REG_OR((core_mng)->cores[i].auto_gate_reg_base,(core_mng)->cores[i].mtx_force_bit);\
+        REG_OR((core_mng)->enable_reg_base,(core_mng)->cores[i].gspn_en_rst_bit);\
+        REG_OR((core_mng)->enable_reg_base,(core_mng)->cores[i].mmu_en_rst_bit);\
+        REG_OR((core_mng)->cores[i].emc_reg_base,(core_mng)->cores[i].mtx_en_bit);\
         i++;\
     }\
 }
@@ -266,8 +273,9 @@ typedef struct //_GSP_GLB_CFG_MAP
     volatile uint32_t scl_clr           :   1;
     volatile uint32_t cmd_word_endian_mod   :   2;
     volatile uint32_t cmd_dword_endian_mod  :   1;
-    volatile uint32_t htap4_en          :   1;
-    volatile uint32_t reserved          :   9;
+    volatile uint32_t htap_mod          :   2;
+    volatile uint32_t vtap_mod          :   1;
+    volatile uint32_t reserved          :   7;
     volatile uint32_t gap_wb            :   8;
     volatile uint32_t gap_rb            :   8;
 } gspn_glb_cfg_mBits;
@@ -757,8 +765,10 @@ typedef struct
     ((volatile GSPN_CTL_REG_T*)reg_base)->glb_cfg.mBits.gap_rb = (v)
 #define GSPN_W_GAP_SET(reg_base,v)\
     ((volatile GSPN_CTL_REG_T*)reg_base)->glb_cfg.mBits.gap_wb = (v)
-#define GSPN_HTAP4_SET(reg_base,v)\
-    ((volatile GSPN_CTL_REG_T*)reg_base)->glb_cfg.mBits.htap4_en = (v)
+#define GSPN_HTAP_SET(reg_base,v)\
+    ((volatile GSPN_CTL_REG_T*)reg_base)->glb_cfg.mBits.htap_mod = (v)
+#define GSPN_VTAP_SET(reg_base,v)\
+        ((volatile GSPN_CTL_REG_T*)reg_base)->glb_cfg.mBits.vtap_mod = (v)
 #define GSPN_CMD_WORD_ENDIAN_SET(reg_base,v)\
     ((volatile GSPN_CTL_REG_T*)reg_base)->glb_cfg.mBits.cmd_word_endian_mod = (v)
 #define GSPN_CMD_DWORD_ENDIAN_SET(reg_base,v)\
@@ -962,7 +972,6 @@ typedef struct
     GSPN_Lx_R5_RGB_SWAP_SET(reg_base,(lx_info)->endian.rgb_swap_mod,L);\
     GSPN_Lx_Y_WORD_ENDIAN_SET(reg_base,(lx_info)->endian.y_word_endn,L);\
     GSPN_Lx_Y_DWORD_ENDIAN_SET(reg_base,(lx_info)->endian.y_dword_endn,L);\
-    GSPN_Lx_ADDR_SET(reg_base,(lx_info)->addr.plane_y,L);\
     GSPN_Lx_PITCH_SET(reg_base,(lx_info)->pitch.w,L);\
     GSPN_Lx_CLIP_START_SET(reg_base,(lx_info)->clip_start.x,(lx_info)->clip_start.y,L);\
     GSPN_Lx_CLIP_SIZE_SET(reg_base,(lx_info)->clip_size.w,(lx_info)->clip_size.h,L);\

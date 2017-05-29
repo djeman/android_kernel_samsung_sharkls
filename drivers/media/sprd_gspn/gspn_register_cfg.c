@@ -11,7 +11,7 @@
  * GNU General Public License for more details.
  */
 
-#include "gspn_drv.h"
+#include "gspn_sync.h"
 
 /*
 func:GSPN_MiscInfoCfg
@@ -22,7 +22,44 @@ static void GSPN_MiscInfoCfg(GSPN_CTL_REG_T *reg_base, GSPN_MISC_INFO_T *misc_in
     GSPN_RUN_MODE_SET(reg_base,misc_info->run_mod);
     GSPN_R_GAP_SET(reg_base,misc_info->gap_rb);
     GSPN_W_GAP_SET(reg_base,misc_info->gap_wb);
-    GSPN_HTAP4_SET(reg_base,misc_info->htap4_en);
+    switch(misc_info->htap4_en)
+    {
+    case 0:  //8 4
+        GSPN_HTAP_SET(reg_base,0);
+        GSPN_VTAP_SET(reg_base,0);
+        break;
+    case 1: // 4  4
+        GSPN_HTAP_SET(reg_base,2);
+        GSPN_VTAP_SET(reg_base,0);
+        break;
+    case 2: // 6 4
+        GSPN_HTAP_SET(reg_base,1);
+        GSPN_VTAP_SET(reg_base,0);
+        break;
+    case 3: //  2  4
+        GSPN_HTAP_SET(reg_base,3);
+        GSPN_VTAP_SET(reg_base,0);
+        break;
+    case 4:  // 8  2
+        GSPN_HTAP_SET(reg_base,0);
+        GSPN_VTAP_SET(reg_base,1);
+        break;
+    case 5: //  4  2
+        GSPN_HTAP_SET(reg_base,2);
+        GSPN_VTAP_SET(reg_base,1);
+        break;
+    case 6:  // 6  2
+        GSPN_HTAP_SET(reg_base,1);
+        GSPN_VTAP_SET(reg_base,1);
+        break;
+    case 7:  // 2  2
+        GSPN_HTAP_SET(reg_base,3);
+        GSPN_VTAP_SET(reg_base,1);
+        break;
+    default:
+        break;
+    }
+    //GSPN_HTAP_SET(reg_base,misc_info->htap4_en);
     if(misc_info->scale_en) {
         GSPN_SCL_RST(reg_base);
     }
@@ -103,9 +140,18 @@ static void GSPN_L0InfoCfg(GSPN_CTL_REG_T *reg_base, GSPN_LAYER0_INFO_T *l0_info
     GSPN_L0_UV_DWORD_ENDIAN_SET(reg_base,l0_info->endian.uv_dword_endn);
     GSPN_L0_Y_WORD_ENDIAN_SET(reg_base,l0_info->endian.y_word_endn);
     GSPN_L0_Y_DWORD_ENDIAN_SET(reg_base,l0_info->endian.y_dword_endn);
-    GSPN_L0_Y_ADDR_SET(reg_base,l0_info->addr.plane_y);
-    GSPN_L0_U_ADDR_SET(reg_base,l0_info->addr.plane_u);
-    GSPN_L0_V_ADDR_SET(reg_base,l0_info->addr.plane_v);
+    if(l0_info->fmt == GSPN_LAYER0_FMT_RGB888)
+    {
+        GSPN_L0_Y_ADDR_SET(reg_base,l0_info->addr.plane_y + 1);
+        GSPN_L0_U_ADDR_SET(reg_base,l0_info->addr.plane_u);
+        GSPN_L0_V_ADDR_SET(reg_base,l0_info->addr.plane_v);
+    }
+    else
+    {
+        GSPN_L0_Y_ADDR_SET(reg_base,l0_info->addr.plane_y );
+        GSPN_L0_U_ADDR_SET(reg_base,l0_info->addr.plane_u);
+        GSPN_L0_V_ADDR_SET(reg_base,l0_info->addr.plane_v);
+    }
     GSPN_Lx_PITCH_SET(reg_base,l0_info->pitch.w,0);
     GSPN_Lx_CLIP_START_SET(reg_base,l0_info->clip_start.x,l0_info->clip_start.y,0);
     GSPN_Lx_CLIP_SIZE_SET(reg_base,l0_info->clip_size.w,l0_info->clip_size.h,0);
@@ -134,9 +180,36 @@ static void GSPN_L0InfoCfg(GSPN_CTL_REG_T *reg_base, GSPN_LAYER0_INFO_T *l0_info
 
 static void GSPN_OSDInfoCfg(GSPN_CTL_REG_T *reg_base, GSPN_CMD_INFO_T *cmd)
 {
+    if(cmd->l1_info.fmt == GSPN_LAYER1_FMT_RGB888)
+    {
+        GSPN_Lx_ADDR_SET(reg_base,cmd->l1_info.addr.plane_y + 1, 1);
+    }
+    else
+    {
+        GSPN_Lx_ADDR_SET(reg_base,cmd->l1_info.addr.plane_y, 1);
+    }
     GSPN_Lx_INFO_CFG(reg_base,&cmd->l1_info,1);
+
+    if(cmd->l2_info.fmt == GSPN_LAYER1_FMT_RGB888)
+    {
+        GSPN_Lx_ADDR_SET(reg_base,cmd->l2_info.addr.plane_y + 1, 2);
+    }
+    else
+    {
+        GSPN_Lx_ADDR_SET(reg_base,cmd->l2_info.addr.plane_y, 2);
+    }
     GSPN_Lx_INFO_CFG(reg_base,&cmd->l2_info,2);
+
+     if(cmd->l3_info.fmt == GSPN_LAYER1_FMT_RGB888)
+    {
+        GSPN_Lx_ADDR_SET(reg_base,cmd->l3_info.addr.plane_y + 1, 3);
+    }
+    else
+    {
+        GSPN_Lx_ADDR_SET(reg_base,cmd->l3_info.addr.plane_y, 3);
+    }
     GSPN_Lx_INFO_CFG(reg_base,&cmd->l3_info,3);
+
 }
 
 /*
@@ -147,6 +220,7 @@ int __must_check GSPN_InfoCfg(GSPN_KCMD_INFO_T *kcmd, int sub_idx)
 {
     GSPN_CTL_REG_T *ctl_reg_base = NULL;
     GSPN_CMD_INFO_T *cmd = NULL;
+    GSPN_CORE_T *core = NULL;
 
     if(kcmd == NULL || kcmd->occupied_core->ctl_reg_base == NULL) {
         return -1;
@@ -159,6 +233,9 @@ int __must_check GSPN_InfoCfg(GSPN_KCMD_INFO_T *kcmd, int sub_idx)
         ctl_reg_base = kcmd->sub_cmd_occupied_core[sub_idx]->ctl_reg_base;
         cmd = &kcmd->sub_cmd[sub_idx];
     }
+
+    core = kcmd->occupied_core;
+    REG_SET(core->clk_select_reg_base, 3);
 
     GSPN_L0InfoCfg(ctl_reg_base, &cmd->l0_info);
     GSPN_OSDInfoCfg(ctl_reg_base, cmd);
@@ -209,17 +286,46 @@ static int __must_check GSPN_ClocksCheckPhase0(GSPN_CONTEXT_T *gspnCtx, uint32_t
         }
     }
 
-    //check GSPN AUTO_GATE clock
-    if(!(REG_GET(core_mng->cores[core_id].auto_gate_reg_base) & core_mng->cores[core_id].auto_gate_bit)) {
-        GSPN_LOGE("core%d auto gate is disabled! 0x%08x & 0x%08x\n",
-                  core_id, REG_GET(core_mng->cores[core_id].auto_gate_reg_base), core_mng->cores[core_id].auto_gate_bit);
+    //check GSPN MTX EB clock 
+    if(!(REG_GET(core_mng->cores[core_id].emc_reg_base) & core_mng->cores[core_id].mtx_en_bit)) {
+        GSPN_LOGE("core%d mtx en is disabled! 0x%08x & 0x%08x\n",
+                  core_id, REG_GET(core_mng->cores[core_id].emc_reg_base), core_mng->cores[core_id].mtx_en_bit);
+        ret++;
+    }
+    //check GSPN NOC AUTO_GATE enable / NOC FORCE_GATE clock
+    if((REG_GET(core_mng->cores[core_id].auto_gate_reg_base) & core_mng->cores[core_id].noc_auto_bit)) {
+        GSPN_LOGD("core%d noc auto is enabled! 0x%08x & 0x%08x\n",
+                  core_id, REG_GET(core_mng->cores[core_id].auto_gate_reg_base), core_mng->cores[core_id].noc_auto_bit);
+    } else if ((REG_GET(core_mng->cores[core_id].auto_gate_reg_base) & core_mng->cores[core_id].noc_force_bit)) {
+        GSPN_LOGD("core%d noc force is enabled! 0x%08x & 0x%08x\n",
+                  core_id, REG_GET(core_mng->cores[core_id].auto_gate_reg_base), core_mng->cores[core_id].noc_force_bit);
+    } else {
+        GSPN_LOGE("core%d GSPN NOC AUTO_GATE clock and NOC FORCE_GATE clock are both not enabled! ");
         ret++;
     }
 
-    //check GSPN FORCE_GATE clock
-    if(REG_GET(core_mng->cores[core_id].auto_gate_reg_base) & core_mng->cores[core_id].force_gate_bit) {
-        GSPN_LOGE("core%d force gate is set! 0x%08x & 0x%08x\n",
+
+    //check GSPN MTX AUTO_GATE clock  / MTX FORCE_GATE clock
+    if((REG_GET(core_mng->cores[core_id].auto_gate_reg_base) & core_mng->cores[core_id].mtx_auto_bit)) {
+        GSPN_LOGD("core%d mtx auto is enabled! 0x%08x & 0x%08x\n",
+                  core_id, REG_GET(core_mng->cores[core_id].auto_gate_reg_base), core_mng->cores[core_id].mtx_auto_bit);
+    } else if ((REG_GET(core_mng->cores[core_id].auto_gate_reg_base) & core_mng->cores[core_id].mtx_force_bit)) {
+        GSPN_LOGD("core%d mtx force is enabled! 0x%08x & 0x%08x\n",
+                  core_id, REG_GET(core_mng->cores[core_id].auto_gate_reg_base), core_mng->cores[core_id].mtx_force_bit);
+    } else {
+        GSPN_LOGE("core%d GSPN MTX AUTO_GATE clock and MTX FORCE_GATE clock are both not enabled! ");
+        ret++;
+    }
+
+    //check GSPN AUTO_GATE clock / GSPN FORCE_GATE clock
+    if((REG_GET(core_mng->cores[core_id].auto_gate_reg_base) & core_mng->cores[core_id].auto_gate_bit)) {
+        GSPN_LOGD("core%d auto gate is enabled! 0x%08x & 0x%08x\n",
+                  core_id, REG_GET(core_mng->cores[core_id].auto_gate_reg_base), core_mng->cores[core_id].auto_gate_bit);
+    } else if (REG_GET(core_mng->cores[core_id].auto_gate_reg_base) & core_mng->cores[core_id].force_gate_bit) {
+        GSPN_LOGD("core%d force gate is enabled! 0x%08x & 0x%08x\n",
                   core_id, REG_GET(core_mng->cores[core_id].auto_gate_reg_base), core_mng->cores[core_id].force_gate_bit);
+    } else {
+        GSPN_LOGE("core%d GSPN AUTO_GATE clock and FORCE_GATE clock are both not enabled! ");
         ret++;
     }
 
@@ -265,8 +371,10 @@ static int __must_check GSPN_ClocksCheckPhase1(GSPN_CORE_MNG_T *core_mng, uint32
        ||!(REG_GET(core_mng->cores[core_id].iommu_ctl_reg_base) & 0x1)) {
         iommu_enabled = 0;
     }
-
+    GSPN_LOGI("iommu enabled: %d\n", iommu_enabled);
+    GSPN_LOGI("iommu ctrl value: %x\n", iommu_ctl);
     //check GSP IOMMU ENABLE
+#if 0
     if((iommu_enabled == 0 || (iommu_ctl & 0xF0000000)==0)/*IOMMU be disabled*/
        &&(((GSPN_MOD1_Lx_EN_GET(reg_base,0) == 1) && (IOVA_CHECK(addr_y0) || IOVA_CHECK(addr_u0) || IOVA_CHECK(addr_v0)))/*L0 is enabled and use iova*/
           ||((GSPN_MOD1_Lx_EN_GET(reg_base,1) == 1) && IOVA_CHECK(addr_y1))/*L1 is enabled and use iova*/
@@ -284,6 +392,7 @@ static int __must_check GSPN_ClocksCheckPhase1(GSPN_CORE_MNG_T *core_mng, uint32
                   REG_GET(core_mng->cores[core_id].iommu_ctl_reg_base),0x1);
         ret++;
     }
+#endif
     return (ret>0)?GSPN_K_CLK_CHK_ERR:GSPN_NO_ERR;
 }
 
@@ -389,29 +498,52 @@ static int GSPN_CoreClockSwitch(GSPN_CORE_T *core, uint32_t enable)
 {
     int ret = 0;
 
-    if(core->gspn_clk == NULL || core->emc_clk == NULL) {
-        GSPN_LOGW("clock not init yet.gspn_clk:%p,emc_clk:%p\n",core->gspn_clk,core->emc_clk);
+    if(core->gspn_clk == NULL || core->mtx_clk == NULL) {
+        GSPN_LOGW("clock not init yet.gspn_clk:%p,emc_clk:%p\n",core->gspn_clk,core->mtx_clk);
         return -1;
     }
-
     if(enable) {
         ret = clk_prepare_enable(core->gspn_clk);
         if(ret) {
-            GSPN_LOGE("enable clock failed!err:%d.\n",ret);
+            GSPN_LOGE("enable gspn clock failed!err:%d.\n",ret);
             return ret;
         } else {
-            GSPN_LOGI("enable clock ok!\n");
+            GSPN_LOGI("enable gspn clock ok!\n");
         }
-        ret = clk_prepare_enable(core->emc_clk);
+        ret = clk_prepare_enable(core->mmu_clk);
         if(ret) {
-            GSPN_LOGE("enable clock failed!err:%d.\n",ret);
+            GSPN_LOGE("enable mmu clock failed!err:%d.\n",ret);
             return ret;
         } else {
-            GSPN_LOGI("enable clock ok!\n");
+            GSPN_LOGI("enable mmu clock ok!\n");
+        }
+        ret = clk_prepare_enable(core->mtx_clk);
+        if(ret) {
+            GSPN_LOGE("enable mtx clock failed!err:%d.\n",ret);
+            return ret;
+        } else {
+            GSPN_LOGI("enable mtx clock ok!\n");
+        }
+        ret = clk_prepare_enable(core->niu_clk);
+        if(ret) {
+            GSPN_LOGE("enable niu clock failed!err:%d.\n",ret);
+            return ret;
+        } else {
+            GSPN_LOGI("enable niu clock ok!\n");
+        }
+        ret = clk_prepare_enable(core->disp_clk);
+        if(ret) {
+            GSPN_LOGE("enable disp clock failed!err:%d.\n",ret);
+            return ret;
+        } else {
+            GSPN_LOGI("enable disp clock ok!\n");
         }
         //GSPN_AUTO_GATE_ENABLE();
     } else {
-        clk_disable_unprepare(core->emc_clk);
+        clk_disable_unprepare(core->disp_clk);
+        clk_disable_unprepare(core->niu_clk);
+        clk_disable_unprepare(core->mtx_clk);
+        clk_disable_unprepare(core->mmu_clk);
         clk_disable_unprepare(core->gspn_clk);
         GSPN_LOGI("disable clock ok!\n");
     }
@@ -522,15 +654,15 @@ static void gspn_int_clear_and_disable(GSPN_CORE_T *core)
     GSPN_CTL_REG_T *reg_base = core->ctl_reg_base;
     GSPN_CMD_INFO_T *cmd = NULL;
     uint32_t reg_val = 0;
-    //GSPN_LOGI("enter0\n");
     if(sub_idx < 0) {
         cmd = &kcmd->src_cmd;
     } else {
         cmd = &kcmd->sub_cmd[sub_idx];
     }
- //   GSPN_LOGI("enter0\n");
+    if (cmd == NULL) {
+        return;
+    }
     if(cmd->des1_info.layer_en == 1) {
- //   GSPN_LOGI("enter0\n");
         reg_val = GSPN_INT_REG_GET(reg_base);
         reg_val &= (~GSPN_INT_EN_BLD_BIT);//bld-int disable
         reg_val &= (~GSPN_INT_EN_BERR_BIT);//bld-err-int disable
@@ -538,9 +670,7 @@ static void gspn_int_clear_and_disable(GSPN_CORE_T *core)
         reg_val |= GSPN_INT_CLR_BERR_BIT;//bld-err-int clear
         GSPN_INT_REG_SET(reg_base,reg_val);
     }
- //   GSPN_LOGI("enter0\n");
     if(cmd->des2_info.layer_en == 1) {
- //   GSPN_LOGI("enter0\n");
         reg_val = GSPN_INT_REG_GET(reg_base);
         reg_val &= (~GSPN_INT_EN_SCL_BIT);//scl-int disable
         reg_val &= (~GSPN_INT_EN_SERR_BIT);//scl-err-int disable
@@ -548,7 +678,6 @@ static void gspn_int_clear_and_disable(GSPN_CORE_T *core)
         reg_val |= GSPN_INT_CLR_SERR_BIT;//scl-err-int clear
         GSPN_INT_REG_SET(reg_base,reg_val);
     }
-   // GSPN_LOGI("enter0\n");
 }
 
 
@@ -562,24 +691,19 @@ irqreturn_t gspn_irq_handler(int32_t irq, void *dev_id)
     uint32_t int_value = 0;
     int32_t i = 0;
 
-   // GSPN_LOGI("enter\n");
     if (NULL == gspnCtx) {
         GSPN_LOGE("irq failed! gspnCtx == NULL!\n");
         return IRQ_NONE;
     }
 
-  //  GSPN_LOGI("enter0\n");
 
     i = 0;
     while(i<gspnCtx->core_mng.core_cnt) {
         int_value = GSPN_INT_REG_GET(gspnCtx->core_mng.cores[i].ctl_reg_base);
- //       GSPN_LOGI("enter1\n");
         if(int_value & (GSPN_INT_STS_BERR_BIT|GSPN_INT_STS_SERR_BIT)) {
             GSPN_LOGE("err detected! int_reg:0x%08x\n",int_value);
-	//	    GSPN_LOGI("enter0\n");
             GSPN_DumpReg(&gspnCtx->core_mng, i);
         }
-   // GSPN_LOGI("enter0\n");
         gspn_int_clear_and_disable(&gspnCtx->core_mng.cores[i]);
         i++;
     }
