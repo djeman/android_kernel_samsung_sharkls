@@ -18,4 +18,9 @@
 
 int sensor_power_on(uint32_t *fd_handle, uint32_t sensor_id, struct sensor_power *dev0, struct sensor_power *dev1, struct sensor_power *dev2);
 int sensor_power_off(uint32_t *fd_handle, uint32_t sensor_id, struct sensor_power *dev0, struct sensor_power *dev1, struct sensor_power *dev2);
+
+#if defined(CONFIG_MACH_J1MINILTE) || defined(CONFIG_MACH_J1ACEVELTE)
+int sensor_power_init(uint32_t *fd_handle, uint32_t sensor_id, struct sensor_power *dev0, struct sensor_power *dev1, struct sensor_power *dev2);
+#endif
+
 #endif

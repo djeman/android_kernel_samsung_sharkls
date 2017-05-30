@@ -59,6 +59,9 @@ struct isp_data_t {
 static struct file *pfile = NULL;
 static struct file *pdebugfile = NULL;
 
+static int fw_version_len=0;
+static uint8_t fw_version[12] = {0};
+
 static int z_ioctl (struct file *f, unsigned int cmd, unsigned long arg)
 {
   if (f->f_op->compat_ioctl)
@@ -155,6 +158,9 @@ static uint32_t _read_otp (void *sensor_handle, int sensor_id, int cmd, long arg
     } else if (SENSOR_OTP_PARAM_READBYTE == param_ptr->type) {
       start_addr = param_ptr->start_addr;
       len = param_ptr->len;
+    } else if (SENSOR_OTP_PARAM_FW_VERSION == param_ptr->type) {
+      start_addr = 0x30;
+      len = 11;
     }
 
   // EEPROM READ
@@ -175,7 +181,7 @@ static uint32_t _read_otp (void *sensor_handle, int sensor_id, int cmd, long arg
 
 }
 
-int sensor_reloadinfo_thread (void *data)
+int Sensor_ReadOtp (void *data)
 {
   int32_t rtn = 0;
   int ret = 0;
@@ -190,21 +196,56 @@ int sensor_reloadinfo_thread (void *data)
   struct isp_data_t sensor_otp;
   uint32_t is_need_checksum = 0;
 
-  MM_TRACE ("sensor_reloadinfo_thread start\n");
-  msleep (2500);
+  uint32_t count = 0;
+  MM_TRACE ("Sensor_ReadOtp start\n");
+  //msleep (2500);
 
   cmr_bzero (&checksum_otp, sizeof (checksum_otp));
   cmr_bzero (&sensor_otp, sizeof (sensor_otp));
   cmr_bzero (param_ptr, sizeof (SENSOR_OTP_PARAM_T));
 
+#if 0
   pfile = filp_open ("/dev/sprd_sensor", O_RDWR, 0);
   if (IS_ERR (pfile)) {
       MM_TRACE ("open /dev/sprd_sensor failed\n");
       return -1;
     }
+#else
+  while(1){
+	  pfile = filp_open ("/dev/sprd_sensor", O_RDWR, 0);
+	  if (IS_ERR (pfile)){
+		    if(count++ < 100) {
+		      mdelay(100);
+			  MM_TRACE ("open /dev/sprd_sensor mdelay 100 \n");
+		    }else{
+		      MM_TRACE ("open /dev/sprd_sensor failed\n");
+		      return -1;
+		    }
+	  }else{
+		break;
+	  }
+  }
+#endif
+
   Sensor_PowerOn (1);
 
   ret = z_ioctl (pfile, SENSOR_IO_SET_I2CCLOCK, &clock);
+
+  /*read fw_version */
+  fw_version_len = 11;
+
+  cmr_bzero (param_ptr, sizeof (SENSOR_OTP_PARAM_T));
+  param_ptr->start_addr = 0;
+  param_ptr->len = fw_version_len;
+  param_ptr->buff = fw_version;
+  param_ptr->type = SENSOR_OTP_PARAM_FW_VERSION;
+  val.type = SENSOR_VAL_TYPE_READ_OTP;
+  val.pval = param_ptr;
+  ret = _read_otp (NULL, 0, SENSOR_ACCESS_VAL, (long) &val);
+  if (ret || 0 == param_ptr->len) {
+      MM_TRACE ("read otp data failed\n");
+      goto EXIT;
+  }
 
   //checksum
   checksum_otp.size = 4;
@@ -261,8 +302,15 @@ int sensor_reloadinfo_thread (void *data)
 #endif
 
 EXIT:
-  filp_close (pfile, NULL);
   Sensor_PowerOn (0);
-  MM_TRACE ("sensor_reloadinfo_thread end\n");
+  filp_close (pfile, NULL);
+  MM_TRACE ("Sensor_ReadOtp end\n");
   return rtn;
+}
+
+void sensor_get_fw_version_otp(void *read_fw_version)
+{
+	if(read_fw_version) {
+		sprintf(read_fw_version, fw_version);
+	}
 }

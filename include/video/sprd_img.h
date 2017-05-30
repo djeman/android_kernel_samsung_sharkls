@@ -125,6 +125,7 @@ struct sprd_img_parm {
 	uint32_t                  shrink;
 	uint32_t                  index;
 	uint32_t                  need_isp;
+	uint32_t                  camera_id;
 	uint32_t                  is_reserved_buf;
 	uint32_t                  buf_flag;
 	struct sprd_img_rect      crop_rect;
@@ -164,6 +165,7 @@ struct sprd_img_sensor_if {
 
 struct sprd_img_frm_info {
 	uint32_t channel_id;
+	uint32_t width;
 	uint32_t height;
 	uint32_t length;
 	uint32_t sec;

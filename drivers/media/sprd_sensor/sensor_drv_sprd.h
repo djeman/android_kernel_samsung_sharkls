@@ -14,6 +14,8 @@
 #define _SENSOR_DRV_SPRD_H_
 
 #include <linux/of_device.h>
+#include <video/sensor_drv_k.h>
+#include <linux/wakelock.h>
 
 #define SENSOER_VDD_1200MV                  1200000
 #define SENSOER_VDD_1300MV                  1300000
@@ -43,21 +45,13 @@ enum sensor_id_e {
 	SENSOR_DEV_0 = 0,
 	SENSOR_DEV_1,
 	SENSOR_DEV_2,
-#if defined(CONFIG_ARCH_WHALE)
-	SENSOR_DEV_3,
-#endif
 	SENSOR_DEV_MAX
 };
 
+
 #define SENSOR_DEV0_I2C_NAME                 "sensor_main"
 #define SENSOR_DEV1_I2C_NAME                 "sensor_sub"
-#if defined(CONFIG_ARCH_WHALE)
-#define SENSOR_DEV2_I2C_NAME                 "sensor_main2"
-#define SENSOR_DEV3_I2C_NAME                 "sensor_sub2"
-#else
 #define SENSOR_DEV2_I2C_NAME                 "sensor_i2c_dev2"
-#define SENSOR_DEV3_I2C_NAME                 "sensor_i2c_dev3"
-#endif
 #define SENSOR_VCM0_I2C_NAME                 "sensor_i2c_vcm0"
 
 
@@ -91,7 +85,70 @@ enum sensor_id_e {
 #define ANA_LDO_PD_CTL                       ANA_REG_BASE + 0x10
 #define ANA_LDO_VCTL2                        ANA_REG_BASE + 0x1C
 
+struct sensor_mclk_tag {
+	uint32_t                        clock;
+	char                            *src_name;
+};
 
+struct sensor_mem_tag {
+	void                            *buf_ptr;
+	size_t                          size;
+};
+
+struct sensor_module_tag {
+	struct mutex                    sync_lock;
+	atomic_t                        users;
+	struct i2c_client               *cur_i2c_client;
+	struct i2c_client               *vcm_i2c_client;
+	uint32_t                        vcm_gpio_i2c_flag;
+};
+
+struct sensor_module_tab_tag {
+	atomic_t                        total_users;
+	uint32_t                        padding;
+	struct mutex                    sensor_id_lock;
+	struct device_node              *of_node;
+	struct clk                      *sensor_mm_in_clk;
+	struct wake_lock                wakelock;
+	struct sensor_module_tag        sensor_dev_tab[SENSOR_DEV_MAX];
+	SENSOR_OTP_PARAM_T 				otp_param[SENSOR_DEV_MAX];
+};
+
+struct sensor_gpio_tag {
+	int                             pwn;
+	int                             reset;
+};
+
+struct sensor_file_tag {
+	struct sensor_module_tab_tag    *module_data;
+	uint32_t                        sensor_id;
+	uint32_t                        sensor_mclk;
+	uint32_t                        iopower_on_count;
+	uint32_t                        avddpower_on_count;
+	uint32_t                        dvddpower_on_count;
+	uint32_t                        motpower_on_count;
+	uint32_t                        mipi_on;
+	uint32_t                        padding;
+	uint32_t                        phy_id;
+	uint32_t                        if_type;
+	struct sensor_gpio_tag          gpio_tab;
+	struct clk                      *ccir_clk;
+	struct clk                      *ccir_enable_clk;
+	struct clk                      *mipi_clk;
+	struct regulator                *camvio_regulator;
+	struct regulator                *camavdd_regulator;
+	struct regulator                *camdvdd_regulator;
+	struct regulator                *cammot_regulator;
+	struct sensor_mem_tag           sensor_mem;
+	void                            *csi_handle;
+};
+
+
+void sensor_k_set_id(struct file *file, uint32_t sensor_id);
+int sensor_k_set_i2c_clk(uint32_t *fd_handle, uint32_t clock);
+void sensor_k_set_i2c_addr(struct file *file, uint16_t i2c_addr);
+int Sensor_K_ReadReg(uint32_t *fd_handle, struct sensor_reg_bits_tag *pReg);
+int sensor_k_wr_i2c(uint32_t *fd_handle, struct sensor_i2c_tag *pI2cTab);
 int sensor_k_set_pd_level(uint32_t *fd_handle, uint8_t power_level);
 int sensor_k_set_rst_level(uint32_t *fd_handle, uint32_t plus_level);
 int sensor_k_set_voltage_cammot(uint32_t *fd_handle, uint32_t cammot_val);
@@ -99,7 +156,22 @@ int sensor_k_set_voltage_avdd(uint32_t *fd_handle, uint32_t avdd_val);
 int sensor_k_set_voltage_dvdd(uint32_t *fd_handle, uint32_t dvdd_val);
 int sensor_k_set_voltage_iovdd(uint32_t *fd_handle, uint32_t iodd_val);
 int sensor_k_set_mclk(uint32_t *fd_handle, uint32_t mclk);
+unsigned short sensor_k_get_sensor_i2c_addr(uint32_t *fd_handle, uint32_t sensor_id);
 int sensor_k_sensor_sel(uint32_t *fd_handle, uint32_t sensor_id);
 struct device_node *get_device_node(void);
+
+int sensor_set_pd_level_fromkernel(struct file *file, uint8_t arg, uint32_t sensor_id);
+int sensor_set_voltage_cammot_fromkernel(struct file *file, SENSOR_VDD_VAL_E arg, uint32_t sensor_id);
+int sensor_set_voltage_avdd_fromkernel(struct file *file, SENSOR_VDD_VAL_E arg, uint32_t sensor_id);
+int sensor_set_voltage_dvdd_fromkernel(struct file *file, SENSOR_VDD_VAL_E arg, uint32_t sensor_id);
+int sensor_set_voltage_iovdd_fromkernel(struct file *file, SENSOR_VDD_VAL_E arg, uint32_t sensor_id);
+int sensor_set_mclk_fromkernel(struct file *file, uint32_t arg, uint32_t sensor_id);
+int sensor_set_rst_level_fromkernel(struct file *file, uint32_t arg, uint32_t sensor_id);
+int sensor_ReadReg_fromkernel(struct file *file, struct sensor_reg_bits_tag *arg);
+int sensor_wr_regtab_fromkernel(struct file *file, struct sensor_reg_tab_tag *arg, uint32_t sensor_id);
+int sensor_set_i2c_clk_fromkernel(struct file *file, uint32_t arg, uint32_t sensor_id);
+int sensor_wr_i2c_fromkernel(struct file *file, struct sensor_i2c_tag *arg);
+int sensor_rd_i2c_fromkernel(struct file *file,struct sensor_i2c_tag *arg, uint32_t sensor_id);
+
 
 #endif //_SENSOR_DRV_K_H_

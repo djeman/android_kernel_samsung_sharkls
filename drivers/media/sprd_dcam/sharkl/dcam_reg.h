@@ -176,7 +176,6 @@
 #endif
 #define DCAM_CAP_X_DECI_FAC_MAX                        4 // cap deci: 0 - 1/8
 #define DCAM_CAP_Y_DECI_FAC_MAX                        4 // cap deci: 0 - 1/8
-#define DCAM_PATH_FRAME_ROT_MAX                        4
 #define DCAM_JPG_BUF_UNIT                              (1 << 15)
 #define DCAM_JPG_UNITS                                 (1 << 10)
 #define DCAM_SC_COEFF_UP_MAX                           4 // path scaling: 1/8 - 4

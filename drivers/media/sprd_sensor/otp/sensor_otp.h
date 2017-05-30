@@ -14,5 +14,24 @@
 #ifndef _SENSOR_OTP_H_
 #define _SENSOR_OTP_H_
 
-int sensor_reloadinfo_thread(void *data);
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/bitops.h>
+#include <linux/delay.h>
+#include <linux/kernel.h>
+#include <linux/kthread.h>
+#include <linux/fs.h>
+#include <linux/file.h>
+#include <linux/fcntl.h>
+#include <linux/debugfs.h>
+#include <video/sensor_drv_k.h>
+#include <linux/vmalloc.h>
+#include <linux/delay.h>
+#include <linux/i2c.h>
+#include <linux/vmalloc.h>
+#include <linux/sprd_mm.h>
+#include "../sensor_drv_sprd.h"
+
+int Sensor_ReadOtp (void *data);
 #endif

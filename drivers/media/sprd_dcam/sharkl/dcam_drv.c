@@ -160,7 +160,6 @@ struct dcam_path_valid {
 	uint32_t                   frame_deci    :1;
 	uint32_t                   scale_tap     :1;
 	uint32_t                   v_deci        :1;
-        uint32_t                   rot_mode      :1;
 };
 
 struct dcam_frm_queue {
@@ -1082,7 +1081,6 @@ int32_t _dcam_stop_path(enum dcam_path_index path_index)
 	_dcam_wait_for_quickstop(path_index);
 	p_path->status = DCAM_ST_STOP;
 	p_path->valide = 0;
-	p_path->sof_cnt = 0;
 	_dcam_frm_clear(path_index);
 
 	spin_unlock_irqrestore(&dcam_lock, flag);
@@ -2048,21 +2046,6 @@ int32_t dcam_path1_cfg(enum dcam_cfg_id id, void *param)
 		break;
 	}
 
-        case DCAM_PATH_ROT_MODE:
-	{
-		uint32_t rot_mode = *(uint32_t*)param;
-		DCAM_CHECK_PARAM_ZERO_POINTER(param);
-		if (rot_mode >= DCAM_PATH_FRAME_ROT_MAX) {
-			rtn = DCAM_RTN_PATH_FRM_DECI_ERR;
-		} else {
-			path->rot_mode = rot_mode;
-			path->valid_param.rot_mode = 1;
-			printk("zcf dcam_path1_cfg rot:\n",path->rot_mode);
-		}
-		break;
-	}
-
-
 	default:
 		break;
 	}
@@ -2293,21 +2276,6 @@ int32_t dcam_path2_cfg(enum dcam_cfg_id id, void *param)
 		}
 		break;
 	}
-
-	  case DCAM_PATH_ROT_MODE:
-	{
-		uint32_t rot_mode = *(uint32_t*)param;
-		DCAM_CHECK_PARAM_ZERO_POINTER(param);
-		if (rot_mode >= DCAM_PATH_FRAME_ROT_MAX) {
-			rtn = DCAM_RTN_PATH_FRM_DECI_ERR;
-	        }else{
-		       path->rot_mode = rot_mode;          //rot_mode;
-		       path->valid_param.rot_mode = 1;
-		       printk("zcf dcam_path2_cfg rot:\n",path->rot_mode);
-	        }
-		break;
-	}
-
 
 	default:
 		break;
@@ -2750,14 +2718,6 @@ LOCAL void _dcam_path1_set(struct dcam_path_desc *path)
 		DCAM_TRACE("DCAM: path 1: deci, x_en=%d, x=%d, y_en=%d, y=%d \n",
 			path->deci_val.deci_x_en, path->deci_val.deci_x, path->deci_val.deci_y_en, path->deci_val.deci_y);
 	}
-
-        if(path->valid_param.rot_mode){
-		path->valid_param.rot_mode = 0;
-		printk("zcf dcam_path1_set 1 rot_mod :%d reg:%x\n",path->rot_mode,REG_RD(DCAM_PATH1_CFG));
-		REG_MWR(DCAM_PATH1_CFG, BIT_10 | BIT_9, path->rot_mode << 9);
-		printk("zcf dcam_path1_set 1 rot_mod :%d reg:%x\n",path->rot_mode,REG_RD(DCAM_PATH1_CFG));
-	}
-
 }
 
 LOCAL void _dcam_path2_set(void)
@@ -2844,14 +2804,6 @@ LOCAL void _dcam_path2_set(void)
 		DCAM_TRACE("DCAM: path 2: deci, x_en=%d, x=%d, y_en=%d, y=%d \n",
 			path->deci_val.deci_x_en, path->deci_val.deci_x, path->deci_val.deci_y_en, path->deci_val.deci_y);
 	}
-
-        if (path->valid_param.rot_mode){
-		path->valid_param.rot_mode = 0;
-		printk("zcf dcam_path2_set rot_mod :%d reg:%x\n",path->rot_mode,REG_RD(DCAM_PATH2_CFG));
-		REG_MWR(DCAM_PATH2_CFG, BIT_10 | BIT_9, path->rot_mode << 9);
-		printk("zcf dcam_path2_set rot_mod :%d reg:%x\n",path->rot_mode,REG_RD(DCAM_PATH2_CFG));
-        }
-
 }
 
 LOCAL void _dcam_buf_queue_init(struct dcam_buf_queue *queue)
@@ -3152,7 +3104,6 @@ LOCAL int32_t _dcam_path_set_next_frm(enum dcam_path_index path_index, uint32_t 
 	}
 
 	DCAM_TRACE("DCAM: next %d y 0x%x uv 0x%x \n", path->output_frame_count, frame.yaddr, frame.uaddr);
-
 	if (0x0 == frame.yaddr || 0x0 == frame.uaddr) {
 		pr_err("DCAM: error addr y 0x%x uv 0x%x\n", frame.yaddr, frame.uaddr);
 		rtn = DCAM_RTN_PATH_NO_MEM;

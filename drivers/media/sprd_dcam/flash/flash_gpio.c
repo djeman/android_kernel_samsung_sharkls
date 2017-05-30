@@ -26,8 +26,11 @@
 #define SPRD_FLASH_OFF		0
 
 #undef GPIO_CAM_FLASH_EN
+#ifdef  CONFIG_MACH_SP9830AEC_4M_H100 || CONFIG_MACH_SP9830IEC_4M_H100 || CONFIG_MACH_SP9830IEE_4M_H100
+#define GPIO_CAM_FLASH_EN   92 //131
+#else
 #define GPIO_CAM_FLASH_EN   131
-
+#endif
 int sprd_flash_on(void)
 {
 	printk("sprd_flash_on \n");

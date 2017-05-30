@@ -70,7 +70,7 @@
 #ifdef CONFIG_SC_FPGA
 #define DCAM_PATH_TIMEOUT                              msecs_to_jiffies(500*10)
 #else
-#define DCAM_PATH_TIMEOUT                              msecs_to_jiffies(500)
+#define DCAM_PATH_TIMEOUT                              msecs_to_jiffies(500*2)
 #endif
 
 #define DCAM_FRM_QUEUE_LENGTH                          4
@@ -156,7 +156,6 @@ struct dcam_path_valid {
 	uint32_t                   frame_deci    :1;
 	uint32_t                   scale_tap     :1;
 	uint32_t                   v_deci        :1;
-        uint32_t                   rot_mode      :1;
 };
 
 struct dcam_frm_queue {
@@ -230,13 +229,18 @@ struct dcam_module {
 struct dcam_sc_coeff {
 	uint32_t                   buf[DCAM_SC_COEFF_BUF_SIZE];
 	uint32_t                   flag;
-	struct dcam_path_desc      dcam_path1;
+	struct dcam_path_desc      dcam_path;
 };
 
-struct dcam_sc_array {
-	struct dcam_sc_coeff       scaling_coeff[DCAM_SC_COEFF_BUF_COUNT];
-	struct dcam_sc_coeff       *scaling_coeff_queue[DCAM_SC_COEFF_BUF_COUNT];
+struct dcam_sc_path {
+	struct dcam_sc_coeff       coeff[DCAM_SC_COEFF_BUF_COUNT];
+	struct dcam_sc_coeff       *coeff_queue[DCAM_SC_COEFF_BUF_COUNT];
 	uint32_t                   valid_cnt;
+};
+
+
+struct dcam_sc_array {
+	struct dcam_sc_path        sc_path[DCAM_PATH_MAX];
 	uint32_t                   is_smooth_zoom;
 };
 
@@ -266,7 +270,7 @@ LOCAL DEFINE_SPINLOCK(dcam_glb_reg_endian_lock);
 
 LOCAL void        _dcam_path0_set(void);
 LOCAL void        _dcam_path1_set(struct dcam_path_desc *path);
-LOCAL void        _dcam_path2_set(void);
+LOCAL void        _dcam_path2_set(struct dcam_path_desc *path);
 LOCAL void        _dcam_frm_clear(enum dcam_path_index path_index);
 LOCAL void        _dcam_link_frm(uint32_t base_id);
 LOCAL int32_t     _dcam_path_set_next_frm(enum dcam_path_index path_index, uint32_t is_1st_frm);
@@ -318,9 +322,9 @@ LOCAL int32_t     _dcam_buf_queue_write(struct dcam_buf_queue *queue, struct dca
 LOCAL int32_t     _dcam_buf_queue_read(struct dcam_buf_queue *queue, struct dcam_frame *frame);
 LOCAL void        _dcam_wait_update_done(enum dcam_path_index path_index, uint32_t *p_flag);
 LOCAL void        _dcam_path_updated_notice(enum dcam_path_index path_index);
-LOCAL int32_t     _dcam_get_valid_sc_coeff(struct dcam_sc_array *sc, struct dcam_sc_coeff **sc_coeff);
-LOCAL int32_t     _dcam_push_sc_buf(struct dcam_sc_array *sc, uint32_t index);
-LOCAL int32_t     _dcam_pop_sc_buf(struct dcam_sc_array *sc, struct dcam_sc_coeff **sc_coeff);
+LOCAL int32_t     _dcam_get_valid_sc_coeff(struct dcam_sc_array *sc, enum dcam_path_index path_index, struct dcam_sc_coeff **sc_coeff);
+LOCAL int32_t     _dcam_push_sc_buf(struct dcam_sc_array *sc, enum dcam_path_index path_index, uint32_t index);
+LOCAL int32_t     _dcam_pop_sc_buf(struct dcam_sc_array *sc, enum dcam_path_index path_index, struct dcam_sc_coeff **sc_coeff);
 LOCAL int32_t     _dcam_calc_sc_coeff(enum dcam_path_index path_index);
 LOCAL int32_t     _dcam_write_sc_coeff(enum dcam_path_index path_index);
 LOCAL void        _dcam_wait_for_quickstop(enum dcam_path_index path_index);
@@ -586,24 +590,34 @@ void dcam_scale_coeff_free(void)
 	}
 }
 
-LOCAL uint32_t *dcam_get_scale_coeff_addr(uint32_t *index)
+LOCAL uint32_t *dcam_get_scale_coeff_addr(struct dcam_sc_array *sc, enum dcam_path_index path_index, uint32_t *index)
 {
 	uint32_t i;
+	struct dcam_sc_path *sc_path;
 
-	if (DCAM_ADDR_INVALID(s_dcam_sc_array)) {
-		printk("DCAM: scale addr, invalid param 0x%x \n",
-			(uint32_t)s_dcam_sc_array);
+	if (DCAM_ADDR_INVALID(sc)) {
+		printk("DCAM: scale addr, invalid param %p \n", sc);
+		return NULL;
+	}
+
+	if (DCAM_PATH_IDX_1 & path_index) {
+		sc_path = &sc->sc_path[DCAM_PATH1];
+	} else if (DCAM_PATH_IDX_2 & path_index) {
+		sc_path = &sc->sc_path[DCAM_PATH2];
+	} else {
+		printk("DCAM: scale addr, invalid param %p path_index %d\n", sc, path_index);
 		return NULL;
 	}
 
 	for (i = 0; i < DCAM_SC_COEFF_BUF_COUNT; i++) {
-		if (0 == s_dcam_sc_array->scaling_coeff[i].flag) {
+		if (0 == sc_path->coeff[i].flag) {
 			*index = i;
-			DCAM_TRACE("dcam: get buf index %d \n", i);
-			return s_dcam_sc_array->scaling_coeff[i].buf;
+			DCAM_TRACE("dcam:  get buf index ok %d path_index %d \n", i, path_index);
+			return sc_path->coeff[i].buf;
 		}
 	}
-	printk("dcam: get buf index %d \n", i);
+
+	printk("dcam: get buf index %d path_index %d \n", i, path_index);
 
 	return NULL;
 }
@@ -635,6 +649,8 @@ int32_t dcam_module_en(struct device_node *dn)
 			ret = -DCAM_RTN_MAX;
 			goto fail_exit;
 		}
+
+		parse_baseaddress(dn);
 
 		dcam_reset(DCAM_RST_ALL, 0);
 		atomic_set(&s_resize_flag, 0);
@@ -880,14 +896,15 @@ int32_t dcam_update_path(enum dcam_path_index path_index, struct dcam_size *in_s
 	}
 
 	if ((DCAM_PATH_IDX_2 & path_index) && s_p_dcam_mod->dcam_path2.valide) {
-		local_irq_save(flags);
+		spin_lock_irqsave(&dcam_lock, flags);
 		if(s_p_dcam_mod->dcam_path2.is_update){
-			local_irq_restore(flags);
-			DCAM_TRACE("DCAM: dcam_update_path 2:  updating return \n");
+			spin_unlock_irqrestore(&dcam_lock, flags);
+			printk("DCAM: dcam_update_path 2:  updating return \n");
 			return rtn;
 		}
-		local_irq_restore(flags);
+		spin_unlock_irqrestore(&dcam_lock, flags);
 
+		DCAM_TRACE("DCAM: To update path2 \n");
 		rtn = dcam_path2_cfg(DCAM_PATH_INPUT_SIZE, in_size);
 		DCAM_RTN_IF_ERR;
 		rtn = dcam_path2_cfg(DCAM_PATH_INPUT_RECT, in_rect);
@@ -898,9 +915,9 @@ int32_t dcam_update_path(enum dcam_path_index path_index, struct dcam_size *in_s
 		rtn = _dcam_path_scaler(DCAM_PATH_IDX_2);
 		DCAM_RTN_IF_ERR;
 
-		local_irq_save(flags);
+		spin_lock_irqsave(&dcam_lock, flags);
 		s_p_dcam_mod->dcam_path2.is_update = 1;
-		local_irq_restore(flags);
+		spin_unlock_irqrestore(&dcam_lock, flags);
 	}
 
 	DCAM_TRACE("DCAM: dcam_update_path: done \n");
@@ -912,6 +929,7 @@ int32_t dcam_start_path(enum dcam_path_index path_index)
 {
 	enum dcam_drv_rtn       rtn = DCAM_RTN_SUCCESS;
 	uint32_t                cap_en = 0;
+	unsigned long           flag;
 
 	DCAM_CHECK_ZERO(s_p_dcam_mod);
 
@@ -926,6 +944,10 @@ int32_t dcam_start_path(enum dcam_path_index path_index)
 
 	cap_en = REG_RD(DCAM_CONTROL) & BIT_2;
 	DCAM_TRACE("DCAM: cap_eb %d \n", cap_en);
+
+	if (DCAM_PATH_IDX_ALL != path_index) {
+		spin_lock_irqsave(&dcam_lock, flag);
+	}
 	if ((DCAM_PATH_IDX_0 & path_index) && s_p_dcam_mod->dcam_path0.valide) {
 		_dcam_path0_set();
 		rtn = _dcam_path_set_next_frm(DCAM_PATH_IDX_0, true);
@@ -962,15 +984,15 @@ int32_t dcam_start_path(enum dcam_path_index path_index)
 		rtn = _dcam_path_scaler(DCAM_PATH_IDX_2);
 		DCAM_RTN_IF_ERR;
 
-		_dcam_path2_set();
+		_dcam_path2_set(&s_p_dcam_mod->dcam_path2);
 
 		rtn = _dcam_path_set_next_frm(DCAM_PATH_IDX_2, true);
 		DCAM_RTN_IF_ERR;
 		_dcam_force_copy_ext(DCAM_PATH_IDX_2, true, true);
+		REG_WR(DCAM_BURST_GAP, 0x0);
 		dcam_glb_reg_owr(DCAM_CFG, BIT_2, DCAM_CFG_REG);
 	}
 
-	printk("DCAM PATH S: %d \n", path_index);
 
 	if (0 == cap_en) {
 #ifdef DCAM_DEBUG
@@ -988,7 +1010,6 @@ int32_t dcam_start_path(enum dcam_path_index path_index)
 		s_p_dcam_mod->dcam_path0.status = DCAM_ST_START;
 	}
 
-	_dcam_reg_trace();
 	if ((DCAM_PATH_IDX_1 & path_index) && s_p_dcam_mod->dcam_path1.valide) {
 		s_p_dcam_mod->dcam_path1.need_wait = 0;
 		s_p_dcam_mod->dcam_path1.status = DCAM_ST_START;
@@ -1000,6 +1021,7 @@ int32_t dcam_start_path(enum dcam_path_index path_index)
 	}
 
 	if (DCAM_PATH_IDX_ALL != path_index) {
+		spin_unlock_irqrestore(&dcam_lock, flag);
 		if ((DCAM_PATH_IDX_0 & path_index)) {
 			_dcam_wait_path_done(DCAM_PATH_IDX_0, NULL);
 		} else if ((DCAM_PATH_IDX_1 & path_index)) {
@@ -1008,7 +1030,10 @@ int32_t dcam_start_path(enum dcam_path_index path_index)
 			_dcam_wait_path_done(DCAM_PATH_IDX_2, NULL);
 		}
 	}
-	s_p_dcam_mod->state &= ~DCAM_STATE_QUICKQUIT;
+
+	printk("DCAM PATH S: %d \n", path_index);
+
+	_dcam_reg_trace();
 
 	DCAM_TRACE("DCAM: start_path E\n");
 	return -rtn;
@@ -1076,6 +1101,7 @@ int32_t _dcam_stop_path(enum dcam_path_index path_index)
 	_dcam_wait_for_quickstop(path_index);
 	p_path->status = DCAM_ST_STOP;
 	p_path->valide = 0;
+	p_path->sof_cnt = 0;
 	_dcam_frm_clear(path_index);
 
 	spin_unlock_irqrestore(&dcam_lock, flag);
@@ -1149,12 +1175,12 @@ LOCAL void    _dcam_quickstop_set(enum dcam_path_index path_index, uint32_t path
 	uint32_t cfg_bit, uint32_t ahbm_bit, uint32_t auto_copy_bit)
 {
 	dcam_glb_reg_owr(DCAM_AHBM_STS, ahbm_bit, DCAM_AHBM_STS_REG);
-	udelay(10);
+	udelay(1000);
 	dcam_glb_reg_mwr(DCAM_CFG, cfg_bit, ~cfg_bit, DCAM_CFG_REG);
-	_dcam_force_copy(path_index);
 	_dcam_wait_for_channel_stop(path_index);
-	dcam_glb_reg_awr(DCAM_AHBM_STS, ~ahbm_bit, DCAM_AHBM_STS_REG);
+	_dcam_force_copy(path_index);
 	dcam_reset(path_rst, 0);
+	dcam_glb_reg_awr(DCAM_AHBM_STS, ~ahbm_bit, DCAM_AHBM_STS_REG);
 
 	return;
 }
@@ -1244,7 +1270,7 @@ int32_t dcam_stop(void)
 	spin_unlock_irqrestore(&dcam_lock, flag);
 
 	dcam_reset(DCAM_RST_ALL, 0);
-	//s_p_dcam_mod->state &= ~DCAM_STATE_QUICKQUIT;
+	s_p_dcam_mod->state &= ~DCAM_STATE_QUICKQUIT;
 	//mutex_unlock(&dcam_sem);
 	mutex_unlock(&dcam_rot_sema);
 	mutex_unlock(&dcam_scale_sema);
@@ -1743,6 +1769,7 @@ int32_t dcam_path0_cfg(enum dcam_cfg_id id, void *param)
 			frame.vaddr_vir = p_addr->vaddr_vir;
 			frame.type  = DCAM_PATH0;
 			frame.fid   = s_p_dcam_mod->dcam_path0.frame_base_id;
+			frame.zsl_private = p_addr->zsl_private;
 			DCAM_TRACE("DCAM: Path 0 DCAM_PATH_OUTPUT_ADDR, i=%d, y=0x%x, u=0x%x, v=0x%x \n",
 				path->output_frame_count, p_addr->yaddr, p_addr->uaddr, p_addr->vaddr);
 			_dcam_buf_queue_write(&s_p_dcam_mod->dcam_path0.buf_queue, &frame);
@@ -1767,7 +1794,7 @@ int32_t dcam_path0_cfg(enum dcam_cfg_id id, void *param)
 			frame->uaddr_vir = p_addr->uaddr_vir;
 			frame->vaddr_vir = p_addr->vaddr_vir;
 
-			DCAM_TRACE("DCAM: Path 1 DCAM_PATH_OUTPUT_RESERVED_ADDR, i=%d, y=0x%x, u=0x%x, v=0x%x \n",
+			DCAM_TRACE("DCAM: Path 0 DCAM_PATH_OUTPUT_RESERVED_ADDR, i=%d, y=0x%x, u=0x%x, v=0x%x \n",
 				path->output_frame_count, p_addr->yaddr, p_addr->uaddr, p_addr->vaddr);
 		}
 		break;
@@ -1799,6 +1826,7 @@ int32_t dcam_path0_cfg(enum dcam_cfg_id id, void *param)
 			rtn = DCAM_RTN_PATH_ENDIAN_ERR;
 		} else {
 			path->data_endian.y_endian	= endian->y_endian;
+			path->data_endian.uv_endian	= endian->uv_endian;
 			path->valid_param.data_endian = 1;
 		}
 		break;
@@ -2038,20 +2066,6 @@ int32_t dcam_path1_cfg(enum dcam_cfg_id id, void *param)
 		}
 		break;
 	}
-        case DCAM_PATH_ROT_MODE:
-        {
-          uint32_t rot_mode = *(uint32_t*)param;
-          DCAM_CHECK_PARAM_ZERO_POINTER(param);
-          if (rot_mode >= DCAM_PATH_FRAME_ROT_MAX) {
-                rtn = DCAM_RTN_PATH_FRM_DECI_ERR;
-          }else{
-                path->rot_mode = rot_mode;
-                path->valid_param.rot_mode = 1;
-                printk("zcf dcam_path1_cfg rot:\n",path->rot_mode);
-          }
-          break;
-        }
-
 
 	default:
 		break;
@@ -2173,6 +2187,7 @@ int32_t dcam_path2_cfg(enum dcam_cfg_id id, void *param)
 			frame.vaddr_vir = p_addr->vaddr_vir;
 			frame.type  = DCAM_PATH2;
 			frame.fid   = s_p_dcam_mod->dcam_path2.frame_base_id;
+			frame.zsl_private = p_addr->zsl_private;
 			DCAM_TRACE("DCAM: Path 2 DCAM_PATH_OUTPUT_ADDR, i=%d, y=0x%x, u=0x%x, v=0x%x \n",
 				path->output_frame_count, p_addr->yaddr, p_addr->uaddr, p_addr->vaddr);
 			_dcam_buf_queue_write(&s_p_dcam_mod->dcam_path2.buf_queue, &frame);
@@ -2283,20 +2298,6 @@ int32_t dcam_path2_cfg(enum dcam_cfg_id id, void *param)
 		}
 		break;
 	}
-        case DCAM_PATH_ROT_MODE:
-        {
-          uint32_t rot_mode = *(uint32_t*)param;
-          DCAM_CHECK_PARAM_ZERO_POINTER(param);
-          if (rot_mode >= DCAM_PATH_FRAME_ROT_MAX) {
-                rtn = DCAM_RTN_PATH_FRM_DECI_ERR;
-               }else{
-                path->rot_mode = rot_mode;          //rot_mode;
-                path->valid_param.rot_mode = 1;
-                printk("zcf dcam_path2_cfg rot:\n",path->rot_mode);
-               }
-        break;
-        }
-
 
 	default:
 		break;
@@ -2475,9 +2476,9 @@ int32_t    dcam_read_registers(uint32_t* reg_buf, uint32_t *buf_len)
 			reg_addr++;
 			*buf_len -= 4;
 		}
+
 		*buf_len = (uint32_t)reg_addr - DCAM_BASE;
 	}
-
 	return 0;
 }
 
@@ -2701,21 +2702,15 @@ LOCAL void _dcam_path1_set(struct dcam_path_desc *path)
 		DCAM_TRACE("DCAM: path 1: deci, x_en=%d, x=%d, y_en=%d, y=%d \n",
 			path->deci_val.deci_x_en, path->deci_val.deci_x, path->deci_val.deci_y_en, path->deci_val.deci_y);
 	}
-        if(path->valid_param.rot_mode){
-            path->valid_param.rot_mode = 0;
-            printk("zcf dcam_path1_set 1 rot_mod :%d reg:%x\n",path->rot_mode,REG_RD(DCAM_PATH1_CFG));
-            REG_MWR(DCAM_PATH1_CFG, BIT_10 | BIT_9, path->rot_mode << 9);
-            printk("zcf dcam_path1_set 1 rot_mod :%d reg:%x\n",path->rot_mode,REG_RD(DCAM_PATH1_CFG));
-        }
 }
 
-LOCAL void _dcam_path2_set(void)
+LOCAL void _dcam_path2_set(struct dcam_path_desc *path)
 {
-	struct dcam_path_desc   *path = NULL;
 	uint32_t                reg_val = 0;
 
 	DCAM_CHECK_ZERO_VOID(s_p_dcam_mod);
-	path = &s_p_dcam_mod->dcam_path2;
+	DCAM_CHECK_ZERO_VOID(path);
+
 	if (path->valid_param.input_size) {
 		reg_val = path->input_size.w | (path->input_size.h << 16);
 		REG_WR(DCAM_PATH2_SRC_SIZE, reg_val);
@@ -2793,12 +2788,6 @@ LOCAL void _dcam_path2_set(void)
 		DCAM_TRACE("DCAM: path 2: deci, x_en=%d, x=%d, y_en=%d, y=%d \n",
 			path->deci_val.deci_x_en, path->deci_val.deci_x, path->deci_val.deci_y_en, path->deci_val.deci_y);
 	}
-        if (path->valid_param.rot_mode){
-               path->valid_param.rot_mode = 0;
-               printk("zcf dcam_path2_set rot_mod :%d reg:%x\n",path->rot_mode,REG_RD(DCAM_PATH2_CFG));
-               REG_MWR(DCAM_PATH2_CFG, BIT_10 | BIT_9, path->rot_mode << 9);
-               printk("zcf dcam_path2_set rot_mod :%d reg:%x\n",path->rot_mode,REG_RD(DCAM_PATH2_CFG));
-       }
 }
 
 LOCAL void _dcam_buf_queue_init(struct dcam_buf_queue *queue)
@@ -3095,8 +3084,7 @@ LOCAL int32_t _dcam_path_set_next_frm(enum dcam_path_index path_index, uint32_t 
 		memcpy(&frame, reserved_frame, sizeof(struct dcam_frame));
 	}
 
-	DCAM_TRACE("DCAM: next %d y 0x%x uv 0x%x \n", path->output_frame_count, frame.yaddr, frame.uaddr);
-
+	DCAM_TRACE("DCAM: next %d %d y 0x%x uv 0x%x \n", path_index, path->output_frame_count, frame.yaddr, frame.uaddr);
 	if (0x0 == frame.yaddr || 0x0 == frame.uaddr) {
 		pr_err("DCAM: error addr y 0x%x uv 0x%x\n", frame.yaddr, frame.uaddr);
 		rtn = DCAM_RTN_PATH_NO_MEM;
@@ -3111,6 +3099,8 @@ LOCAL int32_t _dcam_path_set_next_frm(enum dcam_path_index path_index, uint32_t 
 			}
 		}
 		dcam_frame_lock(&frame);
+		frame.width = path->output_size.w;
+		frame.height = path->output_size.h;
 		if (0 == _dcam_frame_enqueue(p_heap, &frame)) {
 		} else {
 			dcam_frame_unlock(&frame);
@@ -3191,7 +3181,7 @@ LOCAL int32_t _dcam_path_scaler(enum dcam_path_index path_index)
 	} else {
 		REG_MWR(cfg_reg, BIT_20, 0 << 20);
 		if (s_dcam_sc_array->is_smooth_zoom
-			&& DCAM_PATH_IDX_1 == path_index
+			//&& DCAM_PATH_IDX_1 == path_index
 			&& DCAM_ST_START == path->status) {
 			rtn = _dcam_calc_sc_coeff(path_index);
 		} else {
@@ -3384,7 +3374,7 @@ LOCAL int32_t _dcam_set_sc_coeff(enum dcam_path_index path_index)
 		path->output_size.h, scale2yuv420);
 
 
-	tmp_buf = dcam_get_scale_coeff_addr(&index);
+	tmp_buf = dcam_get_scale_coeff_addr(s_dcam_sc_array, path_index, &index);
 
 	if (NULL == tmp_buf) {
 		return -DCAM_RTN_PATH_NO_MEM;
@@ -3627,8 +3617,7 @@ LOCAL void    _dcam_path0_done(void)
 
 	rtn = _dcam_frame_dequeue(&path->frame_queue, &frame);
 	if (0 == rtn && frame.yaddr != s_p_dcam_mod->path0_reserved_frame.yaddr && 0 != dcam_frame_is_locked(&frame)) {
-		frame.width = path->output_size.w;
-		frame.height = path->output_size.h;
+
 		if (user_func) {
 			(*user_func)(&frame, data);
 		}
@@ -3696,8 +3685,6 @@ LOCAL void    _dcam_path1_done(void)
 	} else {
 		rtn = _dcam_frame_dequeue(&path->frame_queue, &frame);
 		if (0 == rtn && frame.yaddr != s_p_dcam_mod->path1_reserved_frame.yaddr && 0 != dcam_frame_is_locked(&frame)) {
-			frame.width = path->output_size.w;
-			frame.height = path->output_size.h;
 			DCAM_TRACE("DCAM: path1 frame 0x%x, y uv, 0x%x 0x%x \n",
 				(int)&frame, frame.yaddr, frame.uaddr);
 			if (user_func) {
@@ -3825,8 +3812,6 @@ LOCAL void    _dcam_path2_done(void)
 				if (0 == rtn && frame.yaddr != s_p_dcam_mod->path2_reserved_frame.yaddr && 0 != dcam_frame_is_locked(&frame)) {
 					DCAM_TRACE("DCAM: path2 frame 0x%x, y uv, 0x%x 0x%x \n",
 						(int)&frame, frame.yaddr, frame.uaddr);
-					frame.width = path->output_size.w;
-					frame.height = path->output_size.h;
 					if (user_func) {
 						(*user_func)(&frame, data);
 					}
@@ -3951,6 +3936,7 @@ LOCAL void    _dcam_raw_slice_done(void)
 LOCAL void    _dcam_path1_sof(void)
 {
 	enum dcam_drv_rtn       rtn = DCAM_RTN_SUCCESS;
+	enum dcam_drv_rtn       ret = DCAM_RTN_SUCCESS;
 	dcam_isr_func           user_func = s_user_func[DCAM_PATH1_SOF];
 	void                    *data = s_user_data[DCAM_PATH1_SOF];
 	struct dcam_path_desc   *path;
@@ -3979,16 +3965,12 @@ LOCAL void    _dcam_path1_sof(void)
 		rtn = _dcam_path_set_next_frm(DCAM_PATH_IDX_1, false);
 		if (path->is_update) {
 			if (s_dcam_sc_array->is_smooth_zoom) {
-				rtn = _dcam_get_valid_sc_coeff(s_dcam_sc_array, &sc_coeff);
-				if (rtn)
-				{
-					path->is_update = 0;
-					printk("DCAM: _dcam_get_valid_sc_coeff fail\n");
-					goto wait;
+				ret = _dcam_get_valid_sc_coeff(s_dcam_sc_array, DCAM_PATH_IDX_1, &sc_coeff);
+				if (!ret) {
+					_dcam_write_sc_coeff(DCAM_PATH_IDX_1);
+					_dcam_path1_set(&sc_coeff->dcam_path);
+					_dcam_pop_sc_buf(s_dcam_sc_array, DCAM_PATH_IDX_1, &sc_coeff);
 				}
-				_dcam_write_sc_coeff(DCAM_PATH_IDX_1);
-				_dcam_path1_set(&sc_coeff->dcam_path1);
-				_dcam_pop_sc_buf(s_dcam_sc_array, &sc_coeff);
 			} else {
 				_dcam_path1_set(path);
 			}
@@ -4005,7 +3987,6 @@ LOCAL void    _dcam_path1_sof(void)
 
 		_dcam_path_updated_notice(DCAM_PATH_IDX_1);
 
-wait:
 		if (rtn) {
 			path->need_wait = 1;
 			printk("DCAM: 1 w\n");
@@ -4023,9 +4004,11 @@ wait:
 LOCAL void    _dcam_path2_sof(void)
 {
 	enum dcam_drv_rtn       rtn = DCAM_RTN_SUCCESS;
+	enum dcam_drv_rtn       ret = DCAM_RTN_SUCCESS;
 	dcam_isr_func           user_func = s_user_func[DCAM_PATH2_SOF];
 	void                    *data = s_user_data[DCAM_PATH2_SOF];
 	struct dcam_path_desc   *path;
+	struct dcam_sc_coeff    *sc_coeff;
 
 	DCAM_TRACE("DCAM: 2 sof done \n");
 
@@ -4053,7 +4036,16 @@ LOCAL void    _dcam_path2_sof(void)
 
 			rtn = _dcam_path_set_next_frm(DCAM_PATH_IDX_2, false);
 			if (path->is_update) {
-				_dcam_path2_set();
+				if (s_dcam_sc_array->is_smooth_zoom) {
+					ret = _dcam_get_valid_sc_coeff(s_dcam_sc_array, DCAM_PATH_IDX_2, &sc_coeff);
+					if (!ret) {
+						_dcam_write_sc_coeff(DCAM_PATH_IDX_2);
+						_dcam_path2_set(&sc_coeff->dcam_path);
+						_dcam_pop_sc_buf(s_dcam_sc_array, DCAM_PATH_IDX_2, &sc_coeff);
+					}
+				} else {
+					_dcam_path2_set(path);
+				}
 				path->is_update = 0;
 				DCAM_TRACE("DCAM: path2 updated \n");
 				_dcam_auto_copy_ext(DCAM_PATH_IDX_2, true, true);
@@ -4331,73 +4323,107 @@ int32_t dcam_stop_sc_coeff(void)
 	zoom_mode = s_dcam_sc_array->is_smooth_zoom;
 	/*memset((void*)s_dcam_sc_array, 0, sizeof(struct dcam_sc_array));*/
 	s_dcam_sc_array->is_smooth_zoom = zoom_mode;
-	s_dcam_sc_array->valid_cnt = 0;
-	memset(&s_dcam_sc_array->scaling_coeff_queue, 0, DCAM_SC_COEFF_BUF_COUNT*sizeof(struct dcam_sc_coeff *));
+	s_dcam_sc_array->sc_path[DCAM_PATH1].valid_cnt = 0;
+	memset(&s_dcam_sc_array->sc_path[DCAM_PATH1].coeff_queue, 0, DCAM_SC_COEFF_BUF_COUNT*sizeof(struct dcam_sc_coeff *));
 
 	return 0;
 }
 
-LOCAL int32_t _dcam_get_valid_sc_coeff(struct dcam_sc_array *sc, struct dcam_sc_coeff **sc_coeff)
+LOCAL int32_t _dcam_get_valid_sc_coeff(struct dcam_sc_array *sc, enum dcam_path_index path_index, struct dcam_sc_coeff **sc_coeff)
 {
+	struct dcam_sc_path *sc_path;
+
 	if (DCAM_ADDR_INVALID(sc) || DCAM_ADDR_INVALID(sc_coeff)) {
-		printk("DCAM: get valid sc, invalid param 0x%x, 0x%x \n",
-			(uint32_t)sc,
-			(uint32_t)sc_coeff);
-		return -1;
-	}
-	if (sc->valid_cnt == 0) {
-		printk("DCAM: valid cnt 0 \n");
+		printk("DCAM: get valid sc, invalid param %p, %p \n",
+			sc,
+			sc_coeff);
 		return -1;
 	}
 
-	*sc_coeff  = sc->scaling_coeff_queue[0];
-	DCAM_TRACE("DCAM: get valid sc, %d \n", sc->valid_cnt);
+	if (DCAM_PATH_IDX_1 & path_index) {
+		sc_path = &sc->sc_path[DCAM_PATH1];
+	} else if (DCAM_PATH_IDX_2 & path_index) {
+		sc_path = &sc->sc_path[DCAM_PATH2];
+	} else {
+		printk("DCAM: _dcam_get_valid_sc_coeff, invalid param %p path_index %d\n", sc, path_index);
+		return NULL;
+	}
+
+	if (sc_path->valid_cnt == 0) {
+		printk("DCAM: valid cnt 0 path_index %d\n", path_index);
+		return -1;
+	}
+
+	*sc_coeff  = sc_path->coeff_queue[0];
+	DCAM_TRACE("DCAM: get valid sc, %d \n", sc_path->valid_cnt);
 	return 0;
 }
 
 
-LOCAL int32_t _dcam_push_sc_buf(struct dcam_sc_array *sc, uint32_t index)
+LOCAL int32_t _dcam_push_sc_buf(struct dcam_sc_array *sc, enum dcam_path_index path_index, uint32_t index)
 {
+	struct dcam_sc_path *sc_path;
+
 	if (DCAM_ADDR_INVALID(sc)) {
-		printk("DCAM: push sc, invalid param 0x%x \n",
-			(uint32_t)sc);
-		return -1;
-	}
-	if (sc->valid_cnt >= DCAM_SC_COEFF_BUF_COUNT) {
-		printk("DCAM: valid cnt %d \n", sc->valid_cnt);
+		printk("DCAM: push sc, invalid param %p \n", sc);
 		return -1;
 	}
 
-	sc->scaling_coeff[index].flag = 1;
-	sc->scaling_coeff_queue[sc->valid_cnt] = &sc->scaling_coeff[index];
-	sc->valid_cnt ++;
+	if (DCAM_PATH_IDX_1 & path_index) {
+		sc_path = &sc->sc_path[DCAM_PATH1];
+	} else if (DCAM_PATH_IDX_2 & path_index) {
+		sc_path = &sc->sc_path[DCAM_PATH2];
+	} else {
+		printk("DCAM: _dcam_push_sc_buf, invalid param %p path_index %d\n", sc, path_index);
+		return NULL;
+	}
 
-	DCAM_TRACE("DCAM: push sc, %d \n", sc->valid_cnt);
+	if (sc_path->valid_cnt >= DCAM_SC_COEFF_BUF_COUNT) {
+		printk("DCAM: valid cnt %d \n", sc_path->valid_cnt);
+		return -1;
+	}
+
+	sc_path->coeff[index].flag = 1;
+	sc_path->coeff_queue[sc_path->valid_cnt] = &sc_path->coeff[index];
+	sc_path->valid_cnt++;
+
+	DCAM_TRACE("DCAM: push sc, %d \n", sc_path->valid_cnt);
 
 	return 0;
 }
 
-LOCAL int32_t _dcam_pop_sc_buf(struct dcam_sc_array *sc, struct dcam_sc_coeff **sc_coeff)
+LOCAL int32_t _dcam_pop_sc_buf(struct dcam_sc_array *sc, enum dcam_path_index path_index, struct dcam_sc_coeff **sc_coeff)
 {
 	uint32_t                i = 0;
+	struct dcam_sc_path     *sc_path;
 
 	if (DCAM_ADDR_INVALID(sc) || DCAM_ADDR_INVALID(sc_coeff)) {
-		printk("DCAM: pop sc, invalid param 0x%x, 0x%x \n",
-			(uint32_t)sc,
-			(uint32_t)sc_coeff);
+		printk("DCAM: pop sc, invalid param %p, %p \n",
+			sc,
+			sc_coeff);
 		return -1;
 	}
-	if (sc->valid_cnt == 0) {
+
+	if (DCAM_PATH_IDX_1 & path_index) {
+		sc_path = &sc->sc_path[DCAM_PATH1];
+	} else if (DCAM_PATH_IDX_2 & path_index) {
+		sc_path = &sc->sc_path[DCAM_PATH2];
+	} else {
+		printk("DCAM: _dcam_pop_sc_buf, invalid param %p path_index %d\n", sc, path_index);
+		return NULL;
+	}
+
+	if (sc_path->valid_cnt == 0) {
 		printk("DCAM: valid cnt 0 \n");
 		return -1;
 	}
-	sc->scaling_coeff_queue[0]->flag = 0;
-	*sc_coeff  = sc->scaling_coeff_queue[0];
-	sc->valid_cnt--;
-	for (i = 0; i < sc->valid_cnt; i++) {
-		sc->scaling_coeff_queue[i] = sc->scaling_coeff_queue[i+1];
+	sc_path->coeff_queue[0]->flag = 0;
+	*sc_coeff  = sc_path->coeff_queue[0];
+	sc_path->valid_cnt--;
+	for (i = 0; i < sc_path->valid_cnt; i++) {
+		sc_path->coeff_queue[i] = sc_path->coeff_queue[i+1];
 	}
-	DCAM_TRACE("DCAM: pop sc, %d \n", sc->valid_cnt);
+	DCAM_TRACE("DCAM: pop sc, %d \n", sc_path->valid_cnt);
 	return 0;
 }
 
@@ -4426,7 +4452,7 @@ LOCAL int32_t _dcam_write_sc_coeff(enum dcam_path_index path_index)
 	if (DCAM_PATH_IDX_1 != path_index && DCAM_PATH_IDX_2 != path_index)
 		return -DCAM_RTN_PARA_ERR;
 
-	ret = _dcam_get_valid_sc_coeff(s_dcam_sc_array, &sc_coeff);
+	ret = _dcam_get_valid_sc_coeff(s_dcam_sc_array, path_index, &sc_coeff);
 	if (ret) {
 		return -DCAM_RTN_PATH_NO_MEM;
 	}
@@ -4440,7 +4466,7 @@ LOCAL int32_t _dcam_write_sc_coeff(enum dcam_path_index path_index)
 	v_chroma_coeff = v_coeff + (DCAM_SC_COEFF_COEF_SIZE/4);
 
 	if (DCAM_PATH_IDX_1 == path_index) {
-		path = &sc_coeff->dcam_path1;
+		path = &sc_coeff->dcam_path;
 		h_coeff_addr += DCAM_SC1_H_TAB_OFFSET;
 		v_coeff_addr += DCAM_SC1_V_TAB_OFFSET;
 		v_chroma_coeff_addr += DCAM_SC1_V_CHROMA_TAB_OFFSET;
@@ -4449,7 +4475,7 @@ LOCAL int32_t _dcam_write_sc_coeff(enum dcam_path_index path_index)
 		clk_status_bit = BIT_5;
 		ver_tap_reg = DCAM_PATH1_CFG;
 	} else if (DCAM_PATH_IDX_2 == path_index) {
-		path = &s_p_dcam_mod->dcam_path2;
+		path = &sc_coeff->dcam_path;
 		h_coeff_addr += DCAM_SC2_H_TAB_OFFSET;
 		v_coeff_addr += DCAM_SC2_V_TAB_OFFSET;
 		v_chroma_coeff_addr += DCAM_SC2_V_CHROMA_TAB_OFFSET;
@@ -4512,6 +4538,7 @@ LOCAL int32_t _dcam_calc_sc_coeff(enum dcam_path_index path_index)
 	uint8_t                 uv_tap = 0;
 	uint32_t                index = 0;
 	struct dcam_sc_coeff    *sc_coeff;
+	uint32_t                path_id = 0;
 
 	DCAM_CHECK_ZERO(s_p_dcam_mod);
 	DCAM_CHECK_ZERO(s_dcam_sc_array);
@@ -4528,6 +4555,7 @@ LOCAL int32_t _dcam_calc_sc_coeff(enum dcam_path_index path_index)
 		clk_switch_shift_bit = 3;
 		clk_status_bit = BIT_5;
 		ver_tap_reg = DCAM_PATH1_CFG;
+		path_id = DCAM_PATH1;
 	} else if (DCAM_PATH_IDX_2 == path_index) {
 		path = &s_p_dcam_mod->dcam_path2;
 		h_coeff_addr += DCAM_SC2_H_TAB_OFFSET;
@@ -4537,6 +4565,7 @@ LOCAL int32_t _dcam_calc_sc_coeff(enum dcam_path_index path_index)
 		clk_switch_shift_bit = 4;
 		clk_status_bit = BIT_6;
 		ver_tap_reg = DCAM_PATH2_CFG;
+		path_id = DCAM_PATH2;
 	}
 
 	if (DCAM_YUV420 == path->output_format) {
@@ -4552,14 +4581,15 @@ LOCAL int32_t _dcam_calc_sc_coeff(enum dcam_path_index path_index)
 	down(&s_p_dcam_mod->scale_coeff_mem_sema);
 
 	spin_lock_irqsave(&dcam_lock,flag);
-	tmp_buf = dcam_get_scale_coeff_addr(&index);
+	tmp_buf = dcam_get_scale_coeff_addr(s_dcam_sc_array, path_index, &index);
 	if (NULL == tmp_buf) {
-		_dcam_pop_sc_buf(s_dcam_sc_array, &sc_coeff);
-		tmp_buf = dcam_get_scale_coeff_addr(&index);
+		_dcam_pop_sc_buf(s_dcam_sc_array, path_index, &sc_coeff);
+		tmp_buf = dcam_get_scale_coeff_addr(s_dcam_sc_array, path_index, &index);
 	}
 	spin_unlock_irqrestore(&dcam_lock,flag);
 
 	if (NULL == tmp_buf) {
+		printk("DCAM: _dcam_calc_sc_coeff tmp_buf NULL! \n");
 		return -DCAM_RTN_PATH_NO_MEM;
 	}
 
@@ -4586,9 +4616,9 @@ LOCAL int32_t _dcam_calc_sc_coeff(enum dcam_path_index path_index)
 	path->scale_tap.y_tap = y_tap;
 	path->scale_tap.uv_tap = uv_tap;
 	path->valid_param.scale_tap = 1;
-	memcpy(&s_dcam_sc_array->scaling_coeff[index].dcam_path1, path, sizeof(struct dcam_path_desc));
+	memcpy(&s_dcam_sc_array->sc_path[path_id].coeff[index].dcam_path, path, sizeof(struct dcam_path_desc));
 	spin_lock_irqsave(&dcam_lock,flag);
-	_dcam_push_sc_buf(s_dcam_sc_array, index);
+	_dcam_push_sc_buf(s_dcam_sc_array, path_index, index);
 	spin_unlock_irqrestore(&dcam_lock,flag);
 
 	up(&s_p_dcam_mod->scale_coeff_mem_sema);

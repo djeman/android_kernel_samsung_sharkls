@@ -558,7 +558,6 @@ static int jpg_open(struct inode *inode, struct file *filp)
     }
 #endif
 
-    cam_pw_on(CAM_PW_DOMAIN_JPG);
     printk("JPEG mmi_clk open");
     ret = clk_enable(jpg_hw_dev.mm_clk);
 
@@ -661,7 +660,6 @@ static int jpg_release (struct inode *inode, struct file *filp)
     }
 
     clk_disable(jpg_hw_dev.mm_clk);
-    cam_pw_off(CAM_PW_DOMAIN_JPG);
 #endif
     if (jpg_fp->is_jpg_aquired) {
         printk(KERN_ERR "error occured and up jpg_mutex \n");

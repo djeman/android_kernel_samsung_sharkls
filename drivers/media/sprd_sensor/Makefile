@@ -10,5 +10,5 @@ endif
 
 sprd_sensor-objs += sensor_drv_k.o $(common-file)
 obj-y += sprd_sensor.o
-obj-y += power/ otp/
-
+obj-y += power/ otp/ identify/
+obj-y += sensor_reloadinfo_thread.o

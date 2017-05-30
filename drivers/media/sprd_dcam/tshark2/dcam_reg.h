@@ -165,7 +165,7 @@
 #define DCAM_FRM_DECI_FAC_MAX                          4
 #define DCAM_CAP_FRAME_WIDTH_MAX                       4092
 #define DCAM_CAP_FRAME_HEIGHT_MAX                      4092
-#if defined(CONFIG_ARCH_SCX35LT8) || defined(CONFIG_ARCH_WHALE)
+#if defined(CONFIG_ARCH_SCX35LT8)
 #define DCAM_PATH_FRAME_WIDTH_MAX                      4416
 #define DCAM_PATH_FRAME_HEIGHT_MAX                     4092
 #define DCAM_PATH2_FRAME_WIDTH_MAX                     4416
@@ -186,14 +186,14 @@
 #define DCAM_PATH_DECI_FAC_MAX                         4 // path deci: 1/2 - 1/16
 #define DCAM_PATH1_LINE_BUF_LENGTH                     2048
 
-#if defined(CONFIG_ARCH_SCX35LT8) || defined(CONFIG_ARCH_WHALE)
+#if defined(CONFIG_ARCH_SCX35LT8)
 #define DCAM_PATH2_LINE_BUF_LENGTH                     4416
 #define DCAM_ISP_LINE_BUF_LENGTH                       4416
 #define DCAM_SCALING_THRESHOLD                         2600
 #else
 #define DCAM_PATH2_LINE_BUF_LENGTH                     4096
 #define DCAM_ISP_LINE_BUF_LENGTH                       3280
-#define DCAM_SCALING_THRESHOLD                         2300
+#define DCAM_SCALING_THRESHOLD                         1900
 #endif
 
 #define DCAM_IRQ                                       IRQ_DCAM_INT

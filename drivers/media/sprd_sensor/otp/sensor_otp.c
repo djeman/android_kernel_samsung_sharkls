@@ -11,13 +11,10 @@
  * GNU General Public License for more details.
  */
 
+#include "sensor_otp.h"
 
-#include <linux/module.h>
-#include <linux/kernel.h>
-#include <video/sensor_drv_k.h>
-
-int sensor_reloadinfo_thread(void *data)
+int Sensor_ReadOtp(void *data)
 {
-	int ret = 0;
-	return ret;
+    int ret = 0;
+    return ret;
 }

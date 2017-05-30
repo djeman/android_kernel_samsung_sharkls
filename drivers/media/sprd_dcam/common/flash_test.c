@@ -23,6 +23,15 @@
 #define SENSOR_K_FALSE                    0
 #define SENSOR_K_TRUE                     1
 
+#if defined CONFIG_MACH_SP9830AEA_5M_H100
+#define SPRD_PWM0_CTRL_OFST                       0xEC
+#define SPRD_PWM0_PATTERN_HIGHT_OFST              0x10
+#define SPRD_PWM0_PATTERT_LOW_OFST                0xC
+#define SPRD_PWM0_TONE_OFST                       0x8
+#define SPRD_PWM0_RATION_OFST                     0x4
+#define SPRD_WHTLED_CTRL_OFST                     0xF0
+#endif
+
 static struct class* flash_test_class = NULL;
 static int g_flash_mode=0;
 

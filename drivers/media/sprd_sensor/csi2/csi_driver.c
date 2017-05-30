@@ -30,7 +30,7 @@ static const struct csi_pclk_cfg csi_pclk_setting[CSI_PCLK_CFG_COUNTER] = {
 	{300, 330, 0x05, 17},
 	{330, 360, 0x15, 17},
 	{360, 400, 0x25, 17},
-#if IS_ENABLED(VERSION3T) || IS_ENABLED(VERSION3D)
+#ifdef IS_ENABLED(VERSION3T) || IS_ENABLED(VERSION3D)
 	{400, 450, 0x06, 25},
 	{450, 500, 0x16, 26},
 #elif IS_ENABLED(VERSION3L)
@@ -211,7 +211,7 @@ static void dphy_init_common(u32 bps_per_lane, u32 phy_id, u32 rx_mode)
 	udelay(1);
 	dphy_cfg_start();
 
-#if defined(CONFIG_ARCH_SCX20)
+#if defined(CONFIG_MACH_SP7720EA) || defined(CONFIG_MACH_SP7720EB) || defined(CONFIG_MACH_SP7720EB_PRIME)
 #if defined(CONFIG_SC_FPGA)
 	sci_glb_write(SPRD_GPIO_BASE + 0x0008, 0xd, -1UL);
 	dphy_write(0x30, 0xc0, &temp);
@@ -224,12 +224,6 @@ static void dphy_init_common(u32 bps_per_lane, u32 phy_id, u32 rx_mode)
 	//LOG_DEBUG2 ("%04x default  reg value: %04x\r\n", 0x57, temp);
 	dphy_write(0x67, 0x03, &temp);
 	dphy_write(0x77, 0x03, &temp);
-#elif defined(CONFIG_ARCH_WHALE)
-	dphy_write(0x37, 0x05, &temp);
-	dphy_write(0x47, 0x05, &temp);
-	dphy_write(0x57, 0x05, &temp);
-	dphy_write(0x67, 0x05, &temp);
-	dphy_write(0x77, 0x05, &temp);
 #else
 	csi_get_pclk_cfg(bps_per_lane, &csi_pclk_cfg_val);
 

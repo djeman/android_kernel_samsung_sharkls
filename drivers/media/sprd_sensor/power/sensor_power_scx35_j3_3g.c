@@ -10,7 +10,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -24,7 +23,6 @@
 static int sensor_s5k4h5yc_poweron(uint32_t *fd_handle, struct sensor_power *dev0, struct sensor_power *dev1, struct sensor_power *dev2)
 {
 	int ret = 0;
-
 	sensor_k_sensor_sel(fd_handle, SENSOR_DEV_1);//select sub sensor
 	//sensor_k_set_pd_level(fd_handle, 0);//power down
 	sensor_k_set_rst_level(fd_handle, 0);//reset
@@ -53,7 +51,6 @@ static int sensor_s5k4h5yc_poweron(uint32_t *fd_handle, struct sensor_power *dev
 static int sensor_s5k4h5yc_poweroff(uint32_t *fd_handle, struct sensor_power *dev0, struct sensor_power *dev1, struct sensor_power *dev2)
 {
 	int ret = 0;
-
 	sensor_k_sensor_sel(fd_handle, SENSOR_DEV_1);//select sub sensor
 	sensor_k_set_rst_level(fd_handle, 0);//reset
 	//sensor_k_set_pd_level(fd_handle, 0);//power down
@@ -72,14 +69,12 @@ static int sensor_s5k4h5yc_poweroff(uint32_t *fd_handle, struct sensor_power *de
 	sensor_k_set_voltage_iovdd(fd_handle, SENSOR_VDD_CLOSED);
 	mdelay(6);//delay 6ms < 10ms
 	printk("s5k4h5yc_poweroff OK \n");
-
 	return ret;
 }
 
 static int sensor_s5k5e3yx_poweron(uint32_t *fd_handle, struct sensor_power *dev0, struct sensor_power *dev1, struct sensor_power *dev2)
 {
 	int ret = 0;
-
 	sensor_k_sensor_sel(fd_handle, SENSOR_DEV_0);//select sub sensor
 	//sensor_k_set_pd_level(fd_handle, 0);//power down
 	sensor_k_set_rst_level(fd_handle, 0);//reset
@@ -111,7 +106,6 @@ static int sensor_s5k5e3yx_poweroff(uint32_t *fd_handle, struct sensor_power *de
 	sensor_k_set_voltage_avdd(fd_handle, SENSOR_VDD_CLOSED);
 	sensor_k_set_voltage_iovdd(fd_handle, SENSOR_VDD_CLOSED);
 	printk("s5k5e3yx poweroff OK \n");
-
 	return ret;
 }
 
@@ -124,7 +118,6 @@ int sensor_power_on(uint32_t *fd_handle, uint32_t sensor_id, struct sensor_power
 	} else if (SENSOR_DEV_1 == sensor_id) {
 		ret = sensor_s5k5e3yx_poweron(fd_handle, dev0, dev1, dev2);
 	}
-
 	return ret;
 }
 

@@ -337,7 +337,6 @@ struct dcam_addr {
 	uint32_t               uaddr_vir;
 	uint32_t               vaddr_vir;
 	uint32_t               zsl_private;
-
 };
 
 struct dcam_sc_tap {
@@ -379,6 +378,7 @@ struct dcam_get_path_id {
 	struct dcam_size       input_size;
 	struct dcam_rect       input_trim;
 	struct dcam_size       output_size;
+	uint32_t               camera_id;
 };
 
 struct dcam_path_info {
