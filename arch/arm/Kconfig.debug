@@ -42,7 +42,7 @@ config ARM_UNWIND
 	  only works with EABI compilers. If unsure say Y.
 
 config SPRD_SYSDUMP
-        tristate "Enable SPRD sysdump handler"
+        bool "Enable SPRD sysdump handler"
         depends on ARCH_SC
         help
           This option enables Spreadtrum sysdump which prepare debug info
