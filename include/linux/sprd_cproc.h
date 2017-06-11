@@ -19,14 +19,6 @@ enum {
 	CPROC_CTRL_DEEP_SLEEP = 1,
 	CPROC_CTRL_RESET = 2,
 	CPROC_CTRL_GET_STATUS = 3,
-	CPROC_CTRL_IRAM_PW = 4,
-	CPROC_CTRL_EXT0,
-	CPROC_CTRL_EXT1,
-	CPROC_CTRL_EXT2,
-	CPROC_CTRL_EXT3,
-	CPROC_CTRL_EXT4,
-	CPROC_CTRL_EXT5,
-	CPROC_CTRL_EXT6,
 	CPROC_CTRL_NR,
 };
 
@@ -45,18 +37,9 @@ struct cproc_segments {
 	uint32_t		maxsz;		/* segment size */
 };
 
-#define MAX_CPROC_NODE_NAME_LEN	0x20
-#define MAX_IRAM_DATA_NUM	0x40
-
-struct load_node {
-	char name[MAX_CPROC_NODE_NAME_LEN];
-	uint32_t size;
-};
-
 struct cproc_ctrl {
 	unsigned long iram_addr;
-	uint32_t iram_size;
-	uint32_t iram_data[MAX_IRAM_DATA_NUM];
+	uint32_t iram_data[CPROC_IRAM_DATA_NR];
 	unsigned long ctrl_reg[CPROC_CTRL_NR];
 	uint32_t ctrl_mask[CPROC_CTRL_NR];
 };
@@ -71,9 +54,9 @@ struct cproc_init_data {
 	int			(*resume)(void *arg);
 
 	struct cproc_ctrl	*ctrl;
-	void * 		shmem;
+
 	int			wdtirq;
-	uint32_t		type;	/* bit0-15: ic type, bit16-31: modlue type*/
+	void		*shmem;
 	uint32_t		segnr;
 	struct cproc_segments	segs[];
 };

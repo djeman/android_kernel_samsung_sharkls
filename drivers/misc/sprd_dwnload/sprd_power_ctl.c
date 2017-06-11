@@ -34,7 +34,6 @@
 #define GNSS_CHIP_DIS		_IO(DOWNLOAD_IOCTL_BASE, 0x05)
 #define GNSS_LNA_EN		_IO(DOWNLOAD_IOCTL_BASE, 0x06)
 #define GNSS_LNA_DIS		_IO(DOWNLOAD_IOCTL_BASE, 0x07)
-#define MARLIN_SET_VERSION	_IO(DOWNLOAD_IOCTL_BASE, 0x08)
 
 struct sprd_gnss
 {
@@ -43,7 +42,6 @@ struct sprd_gnss
 };
 
 static struct sprd_gnss gnss_dev;
-static bool flag_marlin_version = false;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 static struct early_suspend	gnss_suspend;
@@ -101,31 +99,6 @@ static void download_clk_init(bool enable)
 	}
 }
 
-static void sprd_rst_gpio_init(void)
-{
-	int ret;
-	static bool request = 0;
-	struct device_node *np;
-
-	np = of_find_node_by_name(NULL, "sprd-marlin");
-	if (!np) {
-		printk(KERN_ERR"sprd-marlin not found");
-		return;
-	}
-	if(0 == request)
-	{
-		gpio_rst = of_get_gpio(np, 4);
-		ret = gpio_request (gpio_rst, "download");
-		if (ret){
-			printk (KERN_ERR"gpio_rst request err: %d\n", gpio_rst);
-		}
-		else{
-			request = 1;
-		}
-	}
-	gpio_direction_output(gpio_rst,0);
-}
-
 static DEFINE_MUTEX(power_ctl_lock);
 static void sprd_download_poweron(bool enable)
 {
@@ -178,22 +151,10 @@ static void sprd_download_poweron(bool enable)
 				return;
 			}
 		}
-		#ifdef CONFIG_MACH_SHARKLS_J1MINI
-		gpio_request(131, "vdd_pa");
-		gpio_direction_output(131, 1);
-		gpio_set_value(131, 1);
-		#endif
-
-		#ifdef CONFIG_MACH_SHARKLS_J3LTE
-		gpio_request(131, "vdd_pa");
-		gpio_direction_output(131, 1);
-		gpio_set_value(131, 1);
-		#endif
 
 		mutex_lock(&power_ctl_lock);
 		if(enable){
 			if(0 == power_count){
-				sprd_rst_gpio_init();
 				regulator_set_voltage(download_vdd, 1600000, 1600000);
 				ret = regulator_enable(download_vdd);
 				printk("sprd_download_poweron on\n");
@@ -216,24 +177,9 @@ static void sprd_download_poweron(bool enable)
 static void sprd_download_rst(void)
 {
 	msleep(2);
-	gpio_direction_output(gpio_rst,0);
-	msleep(1);
 	gpio_direction_output(gpio_rst,1);
+	msleep(1);
 }
-
-/*true: marlin 15c,false: marlin 15a*/
-static void sprd_set_marlin_version(bool value)
-{
-	printk("sprd_set_marlin_version:%d\n", value);
-	flag_marlin_version = value;
-}
-
-bool sprd_get_marlin_version(void)
-{
-	return flag_marlin_version;
-}
-EXPORT_SYMBOL_GPL(sprd_get_marlin_version);
-
 
 static void sprd_gnss_chip_en(bool enable)
 {
@@ -261,12 +207,26 @@ static void gnss_lna_enable(bool on)
 	}
 }
 
+
+static void sprd_rst_gpio_init(void)
+{
+	struct device_node *np;
+	np = of_find_node_by_name(NULL, "sprd-marlin");
+	if (!np) {
+		printk(KERN_ERR"sprd-marlin not found");
+	return;
+	}
+	gpio_rst = of_get_gpio(np, 4);
+	gpio_direction_output(gpio_rst,0);
+}
+
 static long sprd_power_ctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	printk("DOWNLOAD IOCTL: 0x%x.\n", cmd);
 
 	switch (cmd) {
 	case DOWNLOAD_POWER_ON:
+		sprd_rst_gpio_init();
 		sprd_download_poweron(1);
 		download_clk_init(1);
 		break;
@@ -287,9 +247,6 @@ static long sprd_power_ctl_ioctl(struct file *file, unsigned int cmd, unsigned l
 		break;
 	case GNSS_LNA_DIS:
 		gnss_lna_enable(0);
-		break;
-	case MARLIN_SET_VERSION:
-		sprd_set_marlin_version(true);
 		break;
 	}
 	return 0;

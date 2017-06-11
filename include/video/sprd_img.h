@@ -282,7 +282,6 @@ struct sprd_flash_cfg_param {
 #define SPRD_IMG_IO_GET_TIME          _IOR(SPRD_IMG_IO_MAGIC, 18, struct sprd_img_time)
 #define SPRD_IMG_IO_CHECK_FMT         _IOWR(SPRD_IMG_IO_MAGIC, 19, struct sprd_img_format)
 #define SPRD_IMG_IO_SET_SHRINK        _IOW(SPRD_IMG_IO_MAGIC, 20, uint32_t)
-#define SPRD_IMG_IO_SET_FREQ_FLAG     _IOW(SPRD_IMG_IO_MAGIC, 21, uint32_t)
 #define SPRD_IMG_IO_CFG_FLASH         _IOW(SPRD_IMG_IO_MAGIC, 22, struct sprd_flash_cfg_param)
 
 /*

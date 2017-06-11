@@ -1,6 +1,0 @@
-config VIDEO_GSPN_SPRD
-	tristate "SPRD GSPN driver"
-	# depends on ARCH_SC8825
-	# default m
-	help
-	  Support GSPN for SPRD

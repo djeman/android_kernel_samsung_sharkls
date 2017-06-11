@@ -478,7 +478,7 @@ EXPORT_SYMBOL(sci_adc_dump_register);
 
 void sci_adc_init(void)
 {
-	io_base = (void __iomem *)ANA_ADC_BASE;
+	io_base = (void __iomem *)REGS_ADC_BASE;
 
 #ifndef CONFIG_OF
 	sprd_adc_dev_register();

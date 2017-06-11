@@ -663,6 +663,9 @@ static GSP_CAPABILITY_T* GSP_Config_Capability(void)
 		#else
 			s_gsp_capability.buf_type_support=GSP_Get_Addr_Type();
 		#endif
+                #ifdef CONFIG_GSP_THREE_OVERLAY
+			s_gsp_capability.max_layer_cnt = 3;
+		#endif
         s_gsp_capability.yuv_xywh_even = 1;
         s_gsp_capability.crop_min.w=s_gsp_capability.crop_min.h=4;
         s_gsp_capability.out_min.w=s_gsp_capability.out_min.h=4;
@@ -933,6 +936,9 @@ static void gsp_early_suspend(struct early_suspend* es)
     printk("%s%d\n",__func__,__LINE__);
 
     gspCtx = container_of(es, gsp_context_t, earlysuspend);
+    if (NULL == gspCtx) {
+        return;
+    }
 
     gspCtx->suspend_resume_flag = 1;
 
@@ -955,6 +961,9 @@ static void gsp_late_resume(struct early_suspend* es)
     printk("%s%d\n",__func__,__LINE__);
 
     gspCtx = container_of(es, gsp_context_t, earlysuspend);
+    if (NULL == gspCtx) {
+        return;
+    }
 
     gspCtx->gsp_coef_force_calc = 1;
     //GSP_module_enable(gspCtx);//

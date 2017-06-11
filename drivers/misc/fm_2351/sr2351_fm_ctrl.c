@@ -20,9 +20,8 @@
 #endif
 
 #define SR2351_FM_VERSION	"v0.9"
-#define  Google_FM_APP         1
 static u32 g_volume = 0;
-extern struct shark_fm_info_t shark_fm_info;
+
 int sr2351_fm_set_volume(u32 iarg)
 {
 	SR2351_PRINT("FM set volume : %i.", iarg);
@@ -95,70 +94,6 @@ int sr2351_fm_open(struct inode *inode, struct file *filep)
 	return 0;
 }
 
-/*
-(shark_fm_info.rssi >> 16) & 0x1
-=1: invalid freq
-=0: valid freq
-*/
-
-static int fm_tune(void * p)
-{
-	struct fm_tune_parm parm;
-	if (copy_from_user(&parm, p, sizeof(parm)))
-		return -EFAULT;
-	sr2351_fm_mute();
-	sr2351_fm_set_tune(parm.freq);
-	sr2351_fm_unmute();
-	return 0;
-
-}
-
-static int fm_seek(void * p)
-{
-	struct fm_seek_parm parm;
-	if (copy_from_user(&parm, p, sizeof(parm)))
-		return -EFAULT;
-	sr2351_fm_mute();
-	sr2351_fm_seek(parm.freq, parm.seekdir, 3000, &parm.freq );
-	if (copy_to_user(p, &parm, sizeof(parm)))
-		return -EFAULT;
-	return 0;
-
-}
-
-static int fm_mute(u32 iarg)
-{
-	if (iarg == 1) {
-		sr2351_fm_mute();
-		SR2351_PRINT("fm_mute: mute: %d", iarg);
-		return 0;
-	} else if (iarg == 0) {
-		sr2351_fm_unmute();
-		SR2351_PRINT("fm_unmute: mute: %d", iarg);
-		return 0;
-	} else {
-		SR2351_PRINT("fm_mute error param, mute: %d", iarg);
-		return -EFAULT;
-	}
-}
-
-static int fm_softmute_tune(void * p)
-{
-	struct fm_softmute_tune_t parm;
-	if (copy_from_user(&parm, p, sizeof(parm)))
-		return -EFAULT;
-	sr2351_fm_mute();
-	sr2351_fm_set_tune(parm.freq);
-	parm.rssi = shark_fm_info.inpwr_sts;
-	parm.valid = !((shark_fm_info.rssi >> 16) & 0x1 );
-	if (copy_to_user(p, &parm, sizeof(parm)))
-		return -EFAULT;
-	sr2351_fm_unmute();
-	return 0;
-
-
-}
-
 long sr2351_fm_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
 	void __user *argp = (void __user *)arg;
@@ -169,218 +104,6 @@ long sr2351_fm_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	SR2351_PRINT("FM IOCTL: 0x%x.", cmd);
 
 	switch (cmd) {
-#if Google_FM_APP
-	case FM_IOCTL_POWERUP:
-		sr2351_fm_dis();
-		sr2351_fm_en();
-		udelay(5);
-		sr2351_fm_init();
-		udelay(10);
-		ret = fm_tune(argp);
-		break;
-
-	case FM_IOCTL_POWERDOWN:
-		sr2351_fm_dis();
-		udelay(10);
-		ret = sr2351_fm_deinit();
-		break;
-
-	case FM_IOCTL_TUNE:
-		ret = fm_tune(argp);
-		break;
-
-	case FM_IOCTL_SEEK:
-		ret = fm_seek(argp);
-		break;
-
-	case FM_IOCTL_SETVOL:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_GETVOL:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_MUTE:
-		if (copy_from_user(&iarg, argp, sizeof(iarg)))
-			ret = -EFAULT;
-		ret = fm_mute(iarg);
-		break;
-
-	case FM_IOCTL_GETRSSI:
-		ret = sr2351_fm_get_rssi(&iarg);
-		if (copy_to_user(argp, &iarg, sizeof(iarg)))
-			ret = -EFAULT;
-		break;
-
-	case FM_IOCTL_SCAN:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_STOP_SCAN:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_GETCHIPID:
-		iarg=0x6628;
-		if (copy_to_user(argp, &iarg, sizeof(iarg)))
-			ret=-EFAULT;
-		else ret=0;
-		break;
-
-	case FM_IOCTL_EM_TEST:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_RW_REG:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_GETMONOSTERO:
-		ret = 0;
-		break;
-	case FM_IOCTL_GETCURPAMD:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_GETGOODBCNT:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_GETBADBNT:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_GETBLERRATIO:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_RDS_ONOFF:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_RDS_SUPPORT:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_RDS_SIM_DATA:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_IS_FM_POWERED_UP:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_OVER_BT_ENABLE:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_ANA_SWITCH:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_GETCAPARRAY:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_I2S_SETTING:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_RDS_GROUPCNT:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_RDS_GET_LOG:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_SCAN_GETRSSI:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_SETMONOSTERO:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_RDS_BC_RST:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_CQI_GET:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_GET_HW_INFO:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_GET_I2S_INFO:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_IS_DESE_CHAN:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_TOP_RDWR:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_HOST_RDWR:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_PRE_SEARCH:
-		ret = 0;
-		break;
-
-	case FM_IOCTL_RESTORE_SEARCH:
-		ret = 0;
-		break;
-
-	//case FM_IOCTL_SET_SEARCH_THRESHOLD:
-	//	;
-	//	break;
-
-	case FM_IOCTL_GET_AUDIO_INFO:
-		;
-		break;
-
-	case FM_IOCTL_SCAN_NEW:
-		;
-		break;
-
-	case FM_IOCTL_SEEK_NEW:
-		;
-		break;
-
-	case FM_IOCTL_TUNE_NEW:
-		;
-		break;
-
-	case FM_IOCTL_SOFT_MUTE_TUNE:
-		ret = fm_softmute_tune(argp);
-		break;
-
-	case FM_IOCTL_DESENSE_CHECK:
-		;
-		break;
-
-	case FM_IOCTL_FULL_CQI_LOG:
-		;
-		break;
-
-	case FM_IOCTL_DUMP_REG:
-		;
-		break;
-
-	case FM_IOCTL_CHECK_STATUS:
-		ret = sr2351_fm_check_status(argp);
-		break;
-
-#else
-
 	case FM_IOCTL_ENABLE:
 		if (copy_from_user(&iarg, argp, sizeof(iarg)) || iarg > 1)
 			ret = -EFAULT;
@@ -402,9 +125,9 @@ long sr2351_fm_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	case FM_IOCTL_SET_TUNE:
 		if (copy_from_user(&iarg, argp, sizeof(iarg)))
 			return -EFAULT;
-		sr2351_fm_mute();
+    sr2351_fm_mute();
 		ret = sr2351_fm_set_tune(iarg);
-		sr2351_fm_unmute();
+    sr2351_fm_unmute();
 		break;
 
 	case FM_IOCTL_GET_FREQ:
@@ -456,18 +179,22 @@ long sr2351_fm_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 		break;
 
-	case FM_IOCTL_GET_RSSI:
-		ret = sr2351_fm_get_rssi(&iarg);
-		if(copy_to_user(argp,&iarg,sizeof(iarg)))
-		ret = -EFAULT;
-		break;
+  case FM_IOCTL_GET_RSSI:
+    ret = sr2351_fm_get_rssi(&iarg);
+    if(copy_to_user(argp,&iarg,sizeof(iarg)))
+      ret = -EFAULT;
+    break;
 
-#endif
+    case FM_IOCTL_SET_BAND:
+		if (copy_from_user(buf, argp, sizeof(buf)))
+			ret = -EFAULT;
+    	ret = sr2351_fm_set_band(buf[0],//min freq 
+    		buf[1]);//max freq
+    	break;
 
 	default:
 		SR2351_PRINT("Unknown FM IOCTL!");
-		//return -EINVAL;
-		ret=0;
+		return -EINVAL;
 	}
 
 	return ret;
@@ -476,8 +203,7 @@ long sr2351_fm_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 int sr2351_fm_release(struct inode *inode, struct file *filep)
 {
 	SR2351_PRINT("sr2351_fm_misc_release");
-	sr2351_fm_dis();
-	udelay(5);
+
 	sr2351_fm_deinit();
 
 	return 0;
@@ -608,7 +334,7 @@ static int  sr2351_fm_parse_dts(struct device_node *np)
     }	
     SR2351_PRINT("pin reg base is 0x%x\n", sr2351_fm_base.pin_base);
 
-
+	
     return 0;
 }
 
@@ -623,11 +349,11 @@ static int sr2351_fm_probe(struct platform_device *pdev)
 {
 	int ret = -EINVAL;
 	char *ver_str = SR2351_FM_VERSION;
-
+	
 #ifdef CONFIG_OF
     struct device_node *np;
     np = pdev->dev.of_node;
-
+	
     ret = sr2351_fm_parse_dts(np);
 	if (ret < 0)
 	{

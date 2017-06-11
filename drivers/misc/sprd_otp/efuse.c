@@ -49,7 +49,6 @@
 #include <linux/of_device.h>
 /* FIXME: */
 #include <soc/sprd/arch_lock.h>
-#include <soc/sprd/arch_misc.h>
 
 #ifdef CONFIG_64BIT
 #define SPRD_UIDEFUSE_BASE              SPRD_DEV_P2V(0x40240000)
@@ -65,7 +64,6 @@
 
 static u32 efuse_magic;
 static DEFINE_MUTEX(efuse_mtx);
-
 static void efuse_lock(void)
 {
 	mutex_lock(&efuse_mtx);
@@ -104,12 +102,6 @@ void __efuse_prog_power_on(void)
 	cfg0 = __raw_readl((void *)REG_EFUSE_CFG0);
 	cfg0 &= ~(BIT_EFS_VDDQ_K2_ON | BIT_EFS_VDDQ_K1_ON);
 	cfg0 |= BIT_EFS_VDD_ON;
-#ifdef CONFIG_ARCH_SCX20
-	cfg0 |= BITS_EFS_TYPE(0x2);
-#endif
-	if(soc_is_scx9832a_v0()){
-		cfg0 |= BITS_EFS_TYPE(0x2);
-	}
 	__raw_writel(cfg0, (void *)REG_EFUSE_CFG0);
 	msleep(1);
 
@@ -125,12 +117,6 @@ void __efuse_power_on(void)
 	cfg0 = __raw_readl((void *)REG_EFUSE_CFG0);
 	cfg0 &= ~BIT_EFS_VDDQ_K1_ON;
 	cfg0 |= BIT_EFS_VDD_ON | BIT_EFS_VDDQ_K2_ON;
-#ifdef CONFIG_ARCH_SCX20
-		cfg0 |= BITS_EFS_TYPE(0x2);
-#endif
-	if(soc_is_scx9832a_v0()){
-		cfg0 |= BITS_EFS_TYPE(0x2);
-	}
 	__raw_writel(cfg0, (void *)REG_EFUSE_CFG0);
 	msleep(1);
 }

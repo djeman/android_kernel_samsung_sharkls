@@ -21,7 +21,7 @@
 #define COUNT					256
 #define COEF_ARR_ROWS           9
 //#define COEF_ARR_COLUMNS        8
-#define COEF_ARR_COL_MAX        32
+#define COEF_ARR_COL_MAX        16
 #define GSC_ABS(_a)             ((_a) < 0 ? -(_a) : (_a))
 //#define pi						3.14159265357
 #define GSC_FIX					24

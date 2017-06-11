@@ -25,6 +25,7 @@
 #endif
 
 static struct mutex    g_sdio_func_lock;
+static struct timeval  ack_irq_time = {0};
 static int             ack_gpio_status = 0;
 
 static int marlin_sdio_probe(struct sdio_func *func, const struct sdio_device_id *id);
@@ -587,8 +588,6 @@ int  sdio_dev_get_read_chn(void)
 		return 8;
 	else if(chn_status & SDIO_CHN_9)
 		return 9;
-	else if (chn_status & SDIO_CHN_10)
-		return 10;
 	else if(chn_status & SDIO_CHN_11)
 		return 11;
 	else if(chn_status & SDIO_CHN_12)
@@ -961,20 +960,6 @@ int sdio_pseudo_atc_handler(void)
 	}
 }
 
-int sdio_fm_handler(void)
-{
-	SDIOTRAN_ERR("ENTRY");
-	if (NULL != sdio_tran_handle[FM_CHANNEL_READ].tran_callback) {
-		SDIOTRAN_ERR("tran_callback=%p",
-			sdio_tran_handle[FM_CHANNEL_READ].tran_callback);
-		sdio_tran_handle[FM_CHANNEL_READ].tran_callback();
-		return 0;
-	} else {
-		return -1;
-	}
-}
-
-
 int sdio_pseudo_loopcheck_handler(void)
 {
 	SDIOTRAN_ERR("ENTRY");
@@ -1043,9 +1028,6 @@ static void marlin_workq(void)
 			break;
 		case PSEUDO_ATC_CHANNEL_READ:
 			ret = sdio_pseudo_atc_handler();
-			break;
-		case FM_CHANNEL_READ:
-			ret = sdio_fm_handler();
 			break;
 		case PSEUDO_ATC_CHANNEL_LOOPCHECK:
 			ret = sdio_pseudo_loopcheck_handler();
@@ -1224,7 +1206,7 @@ static irqreturn_t marlinsdio_ready_irq_handler(int irq, void * para)
 
 static int marlin_sdio_sync_init(void)
 {
-#if !(defined CONFIG_MACH_SP8730SEEA || defined CONFIG_MACH_SP8730SEEA_QHD || defined CONFIG_MACH_SP7730SW_T2 || defined CONFIG_MACH_SP7730SW)
+#if !(defined CONFIG_MACH_SP8730SEEA || defined CONFIG_MACH_SP8730SEEA_QHD)
 	int ret;	
 
 	SDIOTRAN_ERR("entry");
@@ -1266,7 +1248,7 @@ void marlin_sdio_sync_uninit(void)
 {
 	free_irq(marlin_sdio_ready_irq_num,NULL);
 	gpio_free(sdio_data->io_ready);
-#if !(defined CONFIG_MACH_SP8730SEEA || defined CONFIG_MACH_SP8730SEEA_QHD || defined CONFIG_MACH_SP7730SW_T2 || defined CONFIG_MACH_SP7730SW)
+#if !(defined CONFIG_MACH_SP8730SEEA || defined CONFIG_MACH_SP8730SEEA_QHD)
 	sci_glb_clr(SPRD_PIN_BASE + sdio_data->rfctl_off,(BIT(4)|BIT(5)|0));
 	sci_glb_set(SPRD_PIN_BASE + sdio_data->rfctl_off,(BIT(4)));
 #endif
@@ -1293,7 +1275,8 @@ int time_d_value(struct timeval *start, struct timeval *end)
 
 static irqreturn_t marlinwake_irq_handler(int irq, void * para)
 {
-	uint32 gpio_wake_status = 0;
+	struct timeval cur_time;
+	uint32 gpio_wake_status = 0, usec;
 	//irq_set_irq_type(irq,IRQF_TRIGGER_RISING|IRQF_TRIGGER_FALLING);
 	gpio_wake_status = gpio_get_value(sdio_data->wake_ack);
 
@@ -1320,19 +1303,27 @@ static irqreturn_t marlinwake_irq_handler(int irq, void * para)
 	irq_count_change++;
 
 	/* avoid gpio jump , so need check the last and cur gpio value.*/	
+	do_gettimeofday(&cur_time);
 	if(ack_gpio_status == gpio_wake_status)
 	{
+		//usec = time_d_value(&ack_irq_time, &cur_time);
+		//if(usec < 200)    //means invalid gpio value, so discard
+		{
 			SDIOTRAN_ERR("discard gpio%d irq\n", sdio_data->wake_ack);
 			return IRQ_HANDLED;
+		}
+		//SDIOTRAN_ERR("gpio%d %d-->%d\n",sdio_data->wake_ack, gpio_wake_status, 1 - gpio_wake_status );
+		//gpio_wake_status = 1 - gpio_wake_status;
+		
 	}
+	ack_irq_time    = cur_time;
+	ack_gpio_status = gpio_wake_status;
+	SDIOTRAN_ERR("%d-%d\n",sdio_data->wake_ack, gpio_wake_status );
 	
 	if(gpio_wake_status)
 		irq_set_irq_type(irq, IRQ_TYPE_EDGE_FALLING);
 	else
 		irq_set_irq_type(irq, IRQ_TYPE_EDGE_RISING);
-
-	ack_gpio_status = gpio_wake_status;
-	SDIOTRAN_ERR("%d-%d\n",sdio_data->wake_ack, gpio_wake_status );
 	
 	if(gpio_wake_status)
 	{
@@ -1344,7 +1335,7 @@ static irqreturn_t marlinwake_irq_handler(int irq, void * para)
 		wake_unlock(&marlinpub_wakelock);
 		sleep_para.gpio_down_time = jiffies;
 	}
-
+	
 	if((!gpio_wake_status) && time_after(sleep_para.gpio_down_time,sleep_para.gpio_up_time))
 	{
 		if(jiffies_to_msecs(sleep_para.gpio_down_time -\
@@ -1451,7 +1442,7 @@ static void marlin_wake_intr_uninit(void)
 }
 
 
-/*
+
 static void sdio_tran_sync(void)
 {
 
@@ -1500,7 +1491,6 @@ static void sdio_tran_sync(void)
 	set_blklen(512);
 }
 
-*/
 
 void set_blklen(int blklen)
 {
@@ -1511,7 +1501,6 @@ void set_blklen(int blklen)
 	SDIOTRAN_ERR("set blklen = %d!!!",blklen);
 
 }
-extern bool sprd_get_marlin_version(void);
 
 static void sdio_init_timer(void)
 {
@@ -1524,20 +1513,10 @@ static void sdio_init_timer(void)
 	sleep_para.ack_high_time = 200;
 	sleep_para.wake_lock_time = HZ/2;
 #else
-	if(sprd_get_marlin_version())  //judge if it is 15A version, for adapt 6.0 branch
-	{
-		sleep_para.marlin_waketime = 350;
-		sleep_para.bt_req_time = 100;
-		sleep_para.ack_high_time = 200;
-		sleep_para.wake_lock_time = HZ/2;
-	}
-	else //15A sleep timer config
-	{
-		sleep_para.marlin_waketime = 1500;
-		sleep_para.bt_req_time = 200;
-		sleep_para.ack_high_time = 300;
-		sleep_para.wake_lock_time = HZ*2;
-	}
+	sleep_para.marlin_waketime = 1500;
+	sleep_para.bt_req_time = 200;
+	sleep_para.ack_high_time = 300;
+	sleep_para.wake_lock_time = HZ*2;
 #endif
 
 	sleep_para.gpio_opt_tag = 0;
@@ -1593,11 +1572,10 @@ static int marlin_sdio_probe(struct sdio_func *func, const struct sdio_device_id
 #endif
 
 	sdio_dev_intr_init();
-/*
+
 #if defined(CONFIG_SDIODEV_TEST)
 	sdio_tran_sync();
 #endif
-*/
 
 /*case1
 #if defined(CONFIG_SDIODEV_TEST)

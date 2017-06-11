@@ -434,12 +434,10 @@ static int sprd_wdt_probe(struct platform_device *pdev)
 	}
 #else
 	ret = fiq_glue_register_handler(&sprd_wdg_fiq_glue_handler);
-	if (ret == 0) {
-		disable_fiq(irq_num);
+	if (ret == 0)
 		enable_fiq(irq_num);
-	} else {
+	else
 		pr_err("<%s> fiq_glue_register_handler failed %d!\n", __func__, ret);
-	}
 #endif
 
 	sci_wdt_kfeeder_init();

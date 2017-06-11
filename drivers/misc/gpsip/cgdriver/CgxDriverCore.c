@@ -264,7 +264,8 @@ last chunk might be small
 last chunk generate app event
 start of block aligned to chunk size
 */
-
+extern unsigned int temp_count;
+extern bool  lost_data_flag;
 TCgReturnCode CgxDriverPrepareRecieve(
 	TCgxDriverState *pState,
 	unsigned char *apBuf,
@@ -293,9 +294,9 @@ TCgReturnCode CgxDriverPrepareRecieve(
 	chunkSize =  pState->transfer.blockSize;
 	//chunkSize = MIN(MAX_DMA_CHUNK_SIZE, pState->transfer.blockSize);
 	chunksInBlock = pState->transfer.blockSize / chunkSize;
-
-
-        DBGMSG3("Requested %d bytes, Block=(%d bytes,%d chunks)", length, pState->transfer.blockSize, chunksInBlock);
+        temp_count = 0;
+        lost_data_flag = 0;
+         DBGMSG3("Requested %d bytes, Block=(%d bytes,%d chunks)", length, pState->transfer.blockSize, chunksInBlock);
 	DBGMSG1("Maximum DMA chunk size is set to %d bytes", chunkSize);
 
 	pState->flags.overrun = FALSE;

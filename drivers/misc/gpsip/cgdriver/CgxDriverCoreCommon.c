@@ -115,7 +115,7 @@ BOOL wasBlockReceived(TCgxDriverState * apState, U32 aBlockNumber)
 extern void trigger_gps_timeout(int timeout);
 #endif
 
-
+bool lost_data_flag = 0;
 TCgReturnCode CgxDriverExecute(
 									   void *pDriver,
 									   TCgxDriverState *pState,
@@ -187,10 +187,35 @@ TCgReturnCode CgxDriverExecute(
 				  }
 			}
 		}
+
+		if(lost_data_flag)
+		{
+			lost_data_flag = 0;
+			pResults->rc = ECgErrorData;
+		}
+
 		pState->flags.wait = FALSE;
 		if (!OK(pResults->rc) && (pResults->rc != ECgCanceled))
 		{
-			DBGMSG2("CGX_IOCTL_WAIT_RCV Failed! %d (t.o=%d ms)", pResults->rc, pControl->wait.timeoutMS);
+                       DBGMSG2("CGX_IOCTL_WAIT_RCV Failed! %d (t.o=%d ms)", pResults->rc, pControl->wait.timeoutMS);
+#if 0
+			   u32 value = 0;
+			if(pResults->rc ==-15)
+			{
+                            gps_spi_sysreg_read_bytes(1,0X02,&value);
+		          printk("sysreg:0x2: 0x%x \n",value);
+			 gps_spi_sysreg_read_bytes(1,0X07,&value);
+		          printk("sysreg:0x7: 0x%x \n",value);
+			  gps_spi_read_bytes(1,0X30,&value);
+			  printk("reg:0x30: 0x%x \n",value);
+			  gps_spi_read_bytes(1,0X34,&value);
+			  printk("reg:0x34: 0x%x \n",value);
+			  gps_spi_read_bytes(1,0X00,&value);
+			  printk("reg:0x00: 0x%x \n",value);
+			  gps_spi_read_bytes(1,0X04,&value);
+			  printk("reg:0x04: 0x%x \n",value);
+			}
+#endif
 		}
 		DBGMSG2("App Buffer 0x%08X, phys:0x%08X", pState->transfer.originalBuffer, pState->transfer.bufferPhys);
 		DBGMSG2("received %d blocks %d chunks", pState->transfer.blocks.received, pState->transfer.chunks.received);
@@ -275,6 +300,7 @@ TCgReturnCode CgxDriverExecute(
 
 		DBGMSG2("WAIT_RCV : rc = %p, pResults->rc = %p", pResults->buffer.bufferAppVirtAddr, pResults->buffer.bufferPhysAddr);
 		DBGMSG2("WAIT_RCV : rc = %d, pResults->rc = %d", rc, pResults->rc);
+//		printk("rc = %d, pResults->rc = %d\n", rc, pResults->rc);// debug using
 
 		break;
 
@@ -299,6 +325,7 @@ TCgReturnCode CgxDriverExecute(
 		default:DBGERR(pResults->rc);
 		}
 	}
+//	printk("rc2 = %d, pResults->rc = %d\n", rc, pResults->rc); //debug using
 	return rc;
 }
 
@@ -356,13 +383,14 @@ TCgReturnCode CgxDriverDataReadyInterruptHandler(void *pDriver, TCgxDriverState 
 	return rc;
 }
 
+unsigned int temp_count = 0;
 TCgReturnCode CgxDriverGpsInterruptHandler(void *pDriver, TCgxDriverState *pState)
 {
 	DBG_FUNC_NAME("CgxDriverGpsInterruptHandler")
 	TCgReturnCode rc = ECgOk;
 	U32 intcode = 0;
+	U32 value = 0;
 	pState->counters.interrupt.all++;
-
 	// read interrupt source register from CGsnap
 	rc = CGCORE_READ_REG( CGCORE_REG_INT_SRC, &intcode);
 	rc = CGCORE_WRITE_REG( CGCORE_REG_INT_CLR, intcode);
@@ -379,6 +407,18 @@ TCgReturnCode CgxDriverGpsInterruptHandler(void *pDriver, TCgxDriverState *pStat
 	#ifdef CGCORE_ACCESS_VIA_SPI
 	if (intcode & CGCORE_INT_DMA_REQ)
 	{
+		temp_count++;
+		value = 0;
+		gps_spi_sysreg_read_bytes(1,0X07,&value);
+		printk("sysreg:0x7: 0x%x temp_count:0x%x\n",value,temp_count);
+		if((value - temp_count) > 0)
+		{
+			lost_data_flag = 1;
+			if (pState->flags.wait)
+				CgxDriverTransferEndSignal(pDriver);
+
+			return rc;
+		}
 		data_req_handle(0,NULL);
 	}
 	#endif

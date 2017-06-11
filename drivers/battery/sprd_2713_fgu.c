@@ -32,7 +32,7 @@
 #include "sprd_battery.h"
 #include <linux/battery/fuelgauge/sprd27x3_fuelgauge4samsung.h>
 
-#define REGS_FGU_BASE ANA_FGU_BASE
+#define REGS_FGU_BASE ANA_FPU_INT_BASE
 
 /* registers definitions for controller REGS_FGU */
 #define REG_FGU_START                   SCI_ADDR(REGS_FGU_BASE, 0x0000)

@@ -56,12 +56,11 @@
 #define V_BIT_31              0x80000000
 
 #define USE_INTERRUPT_DEINT
-#define ENABLE_VPP_FRAME_BY_FRAME
+#define SEQUENCE_RUNNING
 #define SET_CLK_FOR_VPP_TWICE
 #define SPRD_VPP_MAP_SIZE 0x4000
 
 #define DEINT_CLK_LEVEL_NUM 4  //Depend on chip design
-#define MAX_VPP_CTRL_CLK_NUM 8  //Depend on chip design
 
 #define SPRD_VPP_IOCTL_MAGIC 'd'
 #define SPRD_VPP_ALLOCATE_PHYSICAL_MEMORY _IO(SPRD_VPP_IOCTL_MAGIC, 1)
@@ -80,21 +79,6 @@
 #define DEINT_PATH_CFG   	(0x2000)
 #define DEINT_PATH_START   	(0x2004)
 #define DEINT_IMG_SIZE   	(0x2008)
-
-typedef enum
-{
-    SHARK = 0,
-    DOLPHIN = 1,
-    TSHARK = 2,
-    SHARKL = 3,
-    PIKE = 4,
-    PIKEL = 5,
-    SHARKL64 = 6,
-    SHARKLT8 = 7,
-    WHALE = 8,
-    MAX_VERSIONS,
-}
-CHIP_VERSION_E;
 
 typedef struct vpp_drv_buffer_t {
     unsigned int size;
