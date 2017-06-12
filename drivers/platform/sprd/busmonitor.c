@@ -27,6 +27,9 @@
 #include <linux/timer.h>
 #include <linux/timex.h>
 #include <linux/rtc.h>
+#include <linux/hrtimer.h>
+#include <linux/ktime.h>
+
 
 #include <soc/sprd/sci.h>
 #include <soc/sprd/hardware.h>
@@ -46,6 +49,7 @@
 
 ulong axi_bm_base = 0;
 ulong ahb_bm_base = 0;
+static int noirq_en_flag = 0;
 
 #define SPRD_AXI_BM_OFFSET	 0x10000
 #define SPRD_AHB_BM_OFFSET	 0x100000
@@ -81,6 +85,9 @@ struct memory_layout{
 	u32 shm_start;
 	u32 shm_end;
 
+	u32 cpsipc_start;
+	u32 cpsipc_end;
+
 	u32 ap_start2;
 	u32 ap_end2;
 
@@ -96,6 +103,9 @@ struct memory_layout{
 	u32 cptl_start;
 	u32 cptl_end;
 
+	u32 smsg_start;
+	u32 smsg_end;
+
 	u32 ap_start3;
 	u32 ap_end3;
 
@@ -107,6 +117,7 @@ struct memory_layout{
 };
 
 static struct memory_layout memory_layout;
+static struct hrtimer timer;
 
 static u32 bm_count = 0;
 
@@ -302,6 +313,16 @@ static void __sci_axi_bm_set_winlen(void)
 	}
 }
 
+static void __sci_axi_bm_clr_winlen(void)
+{
+	ulong bm_index, base_reg, axi_clk, win_len;
+
+	for (bm_index = AXI_BM0; bm_index <= AXI_BM9; bm_index++) {
+		base_reg = __sci_get_bm_base(bm_index);
+		__raw_writel(0x0, (volatile void *)(base_reg + AXI_BM_CNT_WIN_LEN_REG));
+	}
+}
+
 static int __sci_bm_glb_reset_and_enable(u32 bm_index, bool is_enable)
 {
 	ulong reg_en, reg_rst, bit_en, bit_rst;
@@ -364,7 +385,7 @@ static void __sci_bm_glb_ahb_disable(void)
 		__sci_bm_glb_reset_and_enable(bm_index, false);
 }
 
-static int __sci_bm_get_chn_sel(u32 bm_index)
+static u32 __sci_bm_get_chn_sel(u32 bm_index)
 {
 	ulong reg_val, chn_sel;
 
@@ -438,7 +459,8 @@ static void __sci_bm_store_int_info(u32 bm_index)
 			mask_id = sci_glb_read(REG_AP_AHB_MISC_CFG, 0xFFFFFFFF);
 			debug_bm_int_info[bm_index].msk_id = 0;
 		}
-		BM_ERR("bm int info:\nBM CHN:	%d\nOverlap ADDR:	0x%X\nOverlap CMD:	0x%X\nOverlap DATA:	0x%X	0x%X\nOverlap ID:	%s--%ld\n",
+		BM_ERR("bm int info:\nBM CHN:	%d\nOverlap ADDR:	0x%X\nOverlap\
+			CMD:	0x%X\nOverlap DATA:	0x%X	0x%X\nOverlap ID:	%s--%ld\n",
 			debug_bm_int_info[bm_index].bm_index,
 			debug_bm_int_info[bm_index].msk_addr,
 			debug_bm_int_info[bm_index].msk_cmd,
@@ -464,7 +486,8 @@ static void __sci_bm_store_int_info(u32 bm_index)
 			bm_ctn_dbg.bm_ctn_info[bm_ctn_dbg.current_cnt].msk_id = 0;
 		}
 
-		BM_ERR("bm ctn info:\nBM CHN:	%d\nOverlap ADDR:	0x%X\nOverlap CMD:	0x%X\nOverlap DATA:	0x%X	0x%X\nOverlap ID:	%s--%ld\n",
+		BM_ERR("bm ctn info:\nBM CHN:	%d\nOverlap ADDR:	0x%X\nOverlap\
+			CMD:	0x%X\nOverlap DATA:	0x%X	0x%X\nOverlap ID:	%s--%ld\n",
 			bm_ctn_dbg.bm_ctn_info[bm_ctn_dbg.current_cnt].bm_index,
 			bm_ctn_dbg.bm_ctn_info[bm_ctn_dbg.current_cnt].msk_addr,
 			bm_ctn_dbg.bm_ctn_info[bm_ctn_dbg.current_cnt].msk_cmd,
@@ -498,7 +521,8 @@ static irqreturn_t __sci_bm_isr(int irq_num, void *dev)
 	if(__raw_readl((volatile void *)(bm_reg + AXI_BM_INTC_REG)) & BM_CNT_EN)
 	{
 		if(bm_info == NULL){
-			BM_ERR("BM irq ERR, trigger info: int 0x%x, min addr 0x%x, max addr 0x%x, cnt len 0x%x\n",
+			BM_ERR("BM irq ERR, trigger info: int 0x%x,\
+				min addr 0x%x, max addr 0x%x, cnt len 0x%x\n",
 				__raw_readl((volatile void *)(bm_reg + AXI_BM_INTC_REG)),
 				__raw_readl((volatile void *)(bm_reg + AXI_BM_ADDR_MIN_REG)),
 				__raw_readl((volatile void *)(bm_reg + AXI_BM_ADDR_MAX_REG)),
@@ -509,7 +533,7 @@ static irqreturn_t __sci_bm_isr(int irq_num, void *dev)
 
 		rwbw_cnt = 0x0;
 		/*count stop time stamp */
-		bm_info[buf_write_index].t_stop = get_sys_cnt();//__raw_readl((const volatile void *)(syscnt + 0xc));//((const volatile void *)(SPRD_SYSCNT_BASE + 0xc));
+		bm_info[buf_write_index].t_stop = get_sys_cnt();
 		bm_info[buf_write_index].count = bm_count;
 
 		for (bm_chn = AXI_BM0; bm_chn <= AXI_BM9; bm_chn++) {
@@ -531,18 +555,17 @@ static irqreturn_t __sci_bm_isr(int irq_num, void *dev)
 			rwbw_cnt += bm_info[buf_write_index].per_data[bm_chn][1];
 			rwbw_cnt += bm_info[buf_write_index].per_data[bm_chn][4];
 		}
-		if (++buf_write_index == PER_COUNT_RECORD_SIZE) {
-			buf_write_index = 0;
-			buf_skip_cnt++;
-		}
-
+		buf_write_index++;
 		/*wake up the thread to output log per 4 second*/
-		if ((buf_write_index == 0) ||
-			buf_write_index == (PER_COUNT_RECORD_SIZE >> 1) ) {
-			/*need to skip the star buf, because it includes a lot of usefull info,skip 8s buf*/
-			if(buf_skip_cnt > 1)
+		if (buf_write_index == PER_COUNT_RECORD_SIZE)
+			{
+				buf_write_index = 0;
 				up(&bm_seam);
-		}
+			}
+		if(buf_write_index == (PER_COUNT_RECORD_SIZE >> 1))
+			{
+				up(&bm_seam);
+			}
 		__sci_bm_int_clr();
 		__sci_axi_bm_cnt_clr();
 		__sci_axi_bm_set_winlen();
@@ -551,9 +574,9 @@ static irqreturn_t __sci_bm_isr(int irq_num, void *dev)
 		do_gettimeofday(&tv);
 		rtc_time_to_tm(tv.tv_sec,&tm);
 		tm.tm_hour = tm.tm_hour < 16 ? (tm.tm_hour + 8) : (tm.tm_hour - 16);
-		bm_info[buf_write_index].t_start = get_sys_cnt();//__raw_readl((const volatile void *)(syscnt + 0xc));//((const volatile void *)(SPRD_SYSCNT_BASE + 0xc));
-		bm_info[buf_write_index].tmp1	 = (tm.tm_hour * 10000) + (tm.tm_min * 100) + tm.tm_sec;//emc_clk_get();
-		bm_info[buf_write_index].tmp2	 = 640;//__raw_readl(REG_AON_APB_DPLL_CFG);
+		bm_info[buf_write_index].t_start = get_sys_cnt();
+		bm_info[buf_write_index].tmp1	 = (tm.tm_hour * 10000) + (tm.tm_min * 100) + tm.tm_sec;
+		bm_info[buf_write_index].tmp2	 = 640;
 
 		__sci_axi_bm_cnt_start();
 
@@ -572,7 +595,8 @@ static irqreturn_t __sci_bm_isr(int irq_num, void *dev)
 			bm_int = __raw_readl((volatile void *)(bm_reg + AHB_BM_INTC_REG));
 		if (bm_int & BM_INT_MSK_STS) {
 			__sci_bm_store_int_info(bm_index);
-			if((bm_ctn_dbg.bm_continue_dbg == true) && (bm_ctn_dbg.current_cnt <= BM_CONTINUE_DEBUG_SIZE)){
+			if((bm_ctn_dbg.bm_continue_dbg == true)
+				&& (bm_ctn_dbg.current_cnt <= BM_CONTINUE_DEBUG_SIZE)){
 				bm_int &= ~BM_INT_EN;
 				bm_int |= (BM_INT_CLR | BM_INT_EN);
 			}else{
@@ -595,6 +619,78 @@ static irqreturn_t __sci_bm_isr(int irq_num, void *dev)
 	spin_unlock(&bm_lock);
 
 	return IRQ_HANDLED;
+}
+
+void sci_bm_noirq_ctrl(void)
+{
+	ulong bm_index, rwbw_cnt, bm_chn, bm_reg, bm_int;
+	struct bm_per_info *bm_info;
+	struct timeval tv;
+	struct rtc_time tm;
+	if(!noirq_en_flag)
+	    return ;
+	bm_info = (struct bm_per_info *)per_buf;
+
+	bm_reg = __sci_get_bm_base(AXI_BM0);
+	if(bm_info == NULL){
+		BM_ERR("BM irq ERR, trigger info: int 0x%x, min addr 0x%x,\
+			max addr 0x%x, cnt len 0x%x\n",
+			__raw_readl((volatile void *)(bm_reg + AXI_BM_INTC_REG)),
+			__raw_readl((volatile void *)(bm_reg + AXI_BM_ADDR_MIN_REG)),
+			__raw_readl((volatile void *)(bm_reg + AXI_BM_ADDR_MAX_REG)),
+			__raw_readl((volatile void *)(bm_reg + AXI_BM_CNT_WIN_LEN_REG)));
+		return ;
+	}
+	__sci_axi_bm_cnt_stop();
+
+	rwbw_cnt = 0x0;
+	/*count stop time stamp */
+	bm_info[buf_write_index].t_stop = get_sys_cnt();
+	bm_info[buf_write_index].count = bm_count;
+
+	for (bm_chn = AXI_BM0; bm_chn <= AXI_BM9; bm_chn++) {
+		bm_reg = __sci_get_bm_base(bm_chn);
+		bm_info[buf_write_index].per_data[bm_chn][0] =
+			__raw_readl((volatile void *)(bm_reg + AXI_BM_RTRANS_IN_WIN_REG));
+		bm_info[buf_write_index].per_data[bm_chn][1] =
+			__raw_readl((volatile void *)(bm_reg + AXI_BM_RBW_IN_WIN_REG));
+		bm_info[buf_write_index].per_data[bm_chn][2] =
+			__raw_readl((volatile void *)(bm_reg + AXI_BM_RLATENCY_IN_WIN_REG));
+
+		bm_info[buf_write_index].per_data[bm_chn][3] =
+			__raw_readl((volatile void *)(bm_reg + AXI_BM_WTRANS_IN_WIN_REG));
+		bm_info[buf_write_index].per_data[bm_chn][4] =
+			__raw_readl((volatile void *)(bm_reg + AXI_BM_WBW_IN_WIN_REG));
+		bm_info[buf_write_index].per_data[bm_chn][5] =
+			__raw_readl((volatile void *)(bm_reg + AXI_BM_WLATENCY_IN_WIN_REG));
+
+		rwbw_cnt += bm_info[buf_write_index].per_data[bm_chn][1];
+		rwbw_cnt += bm_info[buf_write_index].per_data[bm_chn][4];
+	}
+	buf_write_index++;
+		/*wake up the thread to output log per 4 second*/
+	if (buf_write_index == PER_COUNT_RECORD_SIZE)
+		{
+			buf_write_index = 0;
+			up(&bm_seam);
+		}
+	if(buf_write_index == (PER_COUNT_RECORD_SIZE >> 1))
+		{
+			up(&bm_seam);
+		}
+	__sci_bm_int_clr();
+	__sci_axi_bm_cnt_clr();
+	__sci_axi_bm_clr_winlen();
+
+	/*count start time stamp */
+	do_gettimeofday(&tv);
+	rtc_time_to_tm(tv.tv_sec,&tm);
+	tm.tm_hour = tm.tm_hour < 16 ? (tm.tm_hour + 8) : (tm.tm_hour - 16);
+	bm_info[buf_write_index].t_start = get_sys_cnt();
+	bm_info[buf_write_index].tmp1	 = (tm.tm_hour * 10000) + (tm.tm_min * 100) + tm.tm_sec;
+	bm_info[buf_write_index].tmp2	 = 640;
+
+	__sci_axi_bm_cnt_start();
 }
 
 unsigned int dmc_mon_cnt_bw(void)
@@ -652,6 +748,8 @@ int sci_bm_set_point(enum sci_bm_index bm_index, enum sci_bm_chn chn,
 	struct resource res;
 	volatile struct sci_bm_reg *bm_reg;
 
+	if (0 == axi_bm_base)
+		return	-ENODEV;
 	bm_reg = (struct sci_bm_reg *)__sci_get_bm_base(bm_index);
 	/*clean the irq status*/
 	bm_reg->intc |= BM_INT_CLR;
@@ -666,7 +764,8 @@ int sci_bm_set_point(enum sci_bm_index bm_index, enum sci_bm_chn chn,
 			ddr_size = res.end - res.start;
 	}
 	/* if monitor ddr addr, it needs addr wrap*/
-	if(cfg->addr_min >= 0x80000000 && "ERROR_NAME" != bm_chn_name[bm_index].chn_name){
+	if(cfg->addr_min >= 0x80000000 &&
+		(strcmp(bm_chn_name[bm_index].chn_name, "ERROR_NAME"))){
 		if(ddr_size == 0x1fffffff)//512M
 			bm_store_vale[bm_index].bm_mask = 0xE0000000;
 		else if(ddr_size == 0x3fffffff)//1G
@@ -677,7 +776,7 @@ int sci_bm_set_point(enum sci_bm_index bm_index, enum sci_bm_chn chn,
 		bm_store_vale[bm_index].bm_mask = 0x00000000;
 #endif
 
-	if ("ERROR_NAME" != bm_chn_name[bm_index].chn_name){
+	if (strcmp(bm_chn_name[bm_index].chn_name, "ERROR_NAME")){
 		if (bm_index < AHB_BM0) {
 			bm_reg->addr_min = cfg->addr_min & (~bm_store_vale[bm_index].bm_mask);
 			bm_reg->addr_max = cfg->addr_max & (~bm_store_vale[bm_index].bm_mask);
@@ -758,6 +857,34 @@ int sci_bm_set_point(enum sci_bm_index bm_index, enum sci_bm_chn chn,
 	return SPRD_BM_SUCCESS;
 }
 
+int sprd_bm_monitor_cp(unsigned start_addr, unsigned end_addr)
+{
+	struct sci_bm_cfg bm_cfg;
+	u32 rd_wt;
+	int ret,i;
+	u32 bm_chn;
+	rd_wt = RW_MODE;
+	bm_cfg.addr_min = (u32)start_addr;
+	bm_cfg.addr_max = (u32)end_addr;
+	bm_cfg.bm_mode = rd_wt;
+	for (bm_chn = AXI_BM0; bm_chn <= AXI_BM9; bm_chn++) {
+		if (!strcmp(bm_chn_name[bm_chn].chn_name, "CPU") ||
+			!strcmp(bm_chn_name[bm_chn].chn_name, "DISP") ||
+			!strcmp(bm_chn_name[bm_chn].chn_name, "GPU") ||
+			!strcmp(bm_chn_name[bm_chn].chn_name, "AP/ZIP") ||
+			!strcmp(bm_chn_name[bm_chn].chn_name, "ZIP") ||
+			!strcmp(bm_chn_name[bm_chn].chn_name, "AP") ||
+			!strcmp(bm_chn_name[bm_chn].chn_name, "MM")) {
+			bm_st_info.bm_dbg_st = true;
+			bm_st_info.bm_dfs_off_st = true;
+			ret = sci_bm_set_point(bm_chn, CHN0, &bm_cfg, NULL, NULL);
+			if (SPRD_BM_SUCCESS != ret)
+				return 0;
+		}
+	}
+	return 1;
+}
+
 void sci_bm_unset_point(enum sci_bm_index bm_index)
 {
 	ulong reg_addr;
@@ -783,23 +910,41 @@ void sci_bm_set_perform_point(void)
 	__sci_bm_glb_count_enable(true);
 }
 
+void sci_bm_set_perform_point_nowinlen(void)
+{
+	__sci_bm_init();
+	__sci_axi_bm_cnt_clr();
+	__sci_bm_int_clr();
+
+	__sci_bm_glb_count_enable(false);
+	__sci_axi_bm_cnt_start();
+	__sci_bm_glb_count_enable(true);
+}
+
 static void sci_bm_def_val_set_by_dts(void)
 {
 	u32 bm_chn, ret;
 	struct sci_bm_cfg bm_cfg;
 	//default set is monitor CP write AP memory.
-	for(bm_chn = AXI_BM0; bm_chn <= AXI_BM9; bm_chn++){
-		if(!strcmp(bm_chn_name[bm_chn].chn_name, "CPU") ||
+	for (bm_chn = AXI_BM0; bm_chn <= AXI_BM9; bm_chn++) {
+		if (!strcmp(bm_chn_name[bm_chn].chn_name, "ERROR_NAME"))
+			break;
+		if (!strcmp(bm_chn_name[bm_chn].chn_name, "CPU") ||
 			!strcmp(bm_chn_name[bm_chn].chn_name, "DISP") ||
 			!strcmp(bm_chn_name[bm_chn].chn_name, "GPU") ||
 			!strcmp(bm_chn_name[bm_chn].chn_name, "AP/ZIP") ||
 			!strcmp(bm_chn_name[bm_chn].chn_name, "ZIP") ||
 			!strcmp(bm_chn_name[bm_chn].chn_name, "AP") ||
-			!strcmp(bm_chn_name[bm_chn].chn_name, "MM") ||
-			!strcmp(bm_chn_name[bm_chn].chn_name, "ERROR_NAME"))
+			!strcmp(bm_chn_name[bm_chn].chn_name, "MM")) {
+			/*if ((memory_layout.ap_end2 != 0x0) && (memory_layout.smsg_start != 0x0)) {
+				bm_cfg.addr_min = memory_layout.ap_end2 + 1;
+				bm_cfg.addr_max = memory_layout.smsg_start - 4;
+			} else*/
 			continue;
-		bm_cfg.addr_min = memory_layout.ap_start3;
-		bm_cfg.addr_max = memory_layout.ap_end3;
+		} else {
+			bm_cfg.addr_min = memory_layout.ap_start3;
+			bm_cfg.addr_max = memory_layout.dram_end & (~0x3);
+		}
 		bm_cfg.bm_mode = W_MODE;
 		ret = sci_bm_set_point(bm_chn, CHN0, &bm_cfg, NULL, NULL);
 		if(SPRD_BM_SUCCESS != ret)
@@ -813,7 +958,8 @@ static void sci_bm_def_val_set(void)
 	struct sci_bm_cfg bm_cfg;
 
 	for (bm_chn = AXI_BM0; bm_chn < BM_SIZE; bm_chn++){
-		if((0x00000000 == bm_def_value[bm_chn].str_addr) && (0x00000000 == bm_def_value[bm_chn].end_addr))
+		if((0x00000000 == bm_def_value[bm_chn].str_addr)
+			&& (0x00000000 == bm_def_value[bm_chn].end_addr))
 			continue;
 		bm_cfg.addr_min = bm_def_value[bm_chn].str_addr;
 		bm_cfg.addr_max = bm_def_value[bm_chn].end_addr;
@@ -828,7 +974,7 @@ static int sci_bm_output_log(void *p)
 {
 	mm_segment_t old_fs;
 	int ret;
-
+	int read_index;
 	while (1) {
 		down(&bm_seam);
 
@@ -839,32 +985,28 @@ static int sci_bm_output_log(void *p)
 				return -ENODEV;
 			}
 		}
-		switch (buf_write_index) {
-		case 0:
-			buf_read_index = PER_COUNT_RECORD_SIZE >> 1;
-			break;
-		case (PER_COUNT_RECORD_SIZE >> 1):
-			buf_read_index = 0x0;
-			break;
-		default:
-			BM_ERR("get buf_read_indiex failed!\n");
-		}
+		if(buf_write_index >= PER_COUNT_RECORD_SIZE >> 1)
+			read_index = 0;
+		else
+			read_index = PER_COUNT_RECORD_SIZE >> 1;
 		old_fs = get_fs();
 		set_fs(get_ds());
 		ret = vfs_write(log_file,
-			(const char *)(per_buf + buf_read_index * sizeof(struct bm_per_info)),
+			(const char *)(per_buf + read_index * sizeof(struct bm_per_info)),
 			sizeof(struct bm_per_info) *(PER_COUNT_RECORD_SIZE >> 1),
 			&log_file->f_pos);
 
 		set_fs(old_fs);
 
 		/*raw back file write*/
-		if (log_file->f_pos >= (sizeof(struct bm_per_info) * LOG_FILE_MAX_RECORDS)) {
+		if (log_file->f_pos >= (LOG_FILE_MAX_RECORDS)) {
 			log_file->f_pos = 0x0;
+			filp_close(log_file, NULL);
+			log_file = 0;
 		}
 	}
-
-	filp_close(log_file, NULL);
+	if (log_file)
+		filp_close(log_file, NULL);
 
 	return 0;
 }
@@ -902,9 +1044,12 @@ static ssize_t sci_bm_axi_dbg_show(struct device *dev,
 
 	for(bm_index = AXI_BM0; bm_index < AHB_BM0; bm_index++){
 		reg_addr = __sci_get_bm_base(bm_index);
-		str_addr = __raw_readl((volatile void *)(reg_addr + AXI_BM_ADDR_MIN_REG)) + (0x80000000 & bm_store_vale[bm_index].bm_mask);
-		end_addr = __raw_readl((volatile void *)(reg_addr + AXI_BM_ADDR_MAX_REG)) + (0x80000000 & bm_store_vale[bm_index].bm_mask);
-		sprintf(chn_info, "%d	0x%08lX	0x%08lX	%s\n", bm_index, str_addr, end_addr, bm_chn_name[bm_index].chn_name);
+		str_addr = __raw_readl((volatile void *)(reg_addr + AXI_BM_ADDR_MIN_REG))
+			+ (0x80000000 & bm_store_vale[bm_index].bm_mask);
+		end_addr = __raw_readl((volatile void *)(reg_addr + AXI_BM_ADDR_MAX_REG))
+			+ (0x80000000 & bm_store_vale[bm_index].bm_mask);
+		sprintf(chn_info, "%d	0x%08lX	0x%08lX	%s\n", bm_index, str_addr,
+			end_addr, bm_chn_name[bm_index].chn_name);
 		strcat(info_buf, chn_info);
 	}
 	BM_INFO("%s\n", info_buf);
@@ -948,8 +1093,10 @@ static ssize_t sci_bm_axi_dbg_store(struct device *dev,
 		return EINVAL;
 	}
 
-	BM_INFO("str addr 0x%lx end addr 0x%lx  chn %ld rw %d\n", start_addr, end_addr, channel, rd_wt);
-	if(((channel > AXI_BM9) && (channel != BM_DEBUG_ALL_CHANNEL)) || (rd_wt > RW_MODE) || (start_addr > end_addr))
+	BM_INFO("str addr 0x%lx end addr 0x%lx  chn %ld rw %d\n",
+		start_addr, end_addr, channel, rd_wt);
+	if(((channel > AXI_BM9) && (channel != BM_DEBUG_ALL_CHANNEL))
+		|| (rd_wt > RW_MODE) || (start_addr > end_addr))
 		return -EINVAL;
 
 	/*for (bm_index = AXI_BM0; bm_index <= AXI_BM9; bm_index++)
@@ -987,12 +1134,17 @@ static ssize_t sci_bm_ahb_dbg_show(struct device *dev,
 
 	for(bm_index = AHB_BM0; bm_index < BM_SIZE; bm_index++){
 		reg_addr = __sci_get_bm_base(bm_index);
-		str_addr = __raw_readl((volatile void *)(reg_addr + AXI_BM_ADDR_MIN_REG)) + (0x80000000 & bm_store_vale[bm_index].bm_mask);
-		end_addr = __raw_readl((volatile void *)(reg_addr + AXI_BM_ADDR_MAX_REG)) + (0x80000000 & bm_store_vale[bm_index].bm_mask);
+		str_addr = __raw_readl((volatile void *)(reg_addr + AXI_BM_ADDR_MIN_REG))
+			+ (0x80000000 & bm_store_vale[bm_index].bm_mask);
+		end_addr = __raw_readl((volatile void *)(reg_addr + AXI_BM_ADDR_MAX_REG))
+			+ (0x80000000 & bm_store_vale[bm_index].bm_mask);
 		str_data = __raw_readl((volatile void *)(reg_addr + AXI_BM_DATA_MIN_L_REG));
 		end_data = __raw_readl((volatile void *)(reg_addr + AXI_BM_DATA_MAX_L_REG));
 		chn_sel = __sci_bm_get_chn_sel(bm_index);
-		sprintf(chn_info, "%d	 0x%08lX  0x%08lX  0x%08lX  0x%08lX  %s\n", bm_index-10, str_addr, end_addr,
+		if (chn_sel < 0)
+			return -EINVAL;
+		sprintf(chn_info, "%d	 0x%08lX  0x%08lX  0x%08lX  0x%08lX  %s\n",
+			bm_index-10, str_addr, end_addr,
 			str_data, end_data, bm_chn_name[chn_sel].chn_name);
 		strcat(info_buf, chn_info);
 	}
@@ -1006,11 +1158,12 @@ static ssize_t sci_bm_ahb_dbg_store(struct device *dev,
 {
 	unsigned char addr_start[12], data_min[12];
 	unsigned char addr_end[12], data_max[12];
-	unsigned long start_addr, end_addr, min_data, max_data, channel, chn_sel, bm_index;
+	unsigned long start_addr, end_addr, min_data, max_data, channel, chn_sel;
 	struct sci_bm_cfg bm_cfg;
 	int ret;
 
-	sscanf(buf, "%ld %ld %s %s %s %s", &channel, &chn_sel, addr_start, addr_end, data_min, data_max);
+	sscanf(buf, "%ld %ld %s %s %s %s", &channel, &chn_sel,
+		addr_start, addr_end, data_min, data_max);
 
 	ret = strict_strtoul(addr_start, 0, &start_addr);
 	if (ret)
@@ -1025,7 +1178,8 @@ static ssize_t sci_bm_ahb_dbg_store(struct device *dev,
 	if (ret)
 		BM_ERR("end data %s is not in hex or decimal form.\n", buf);
 
-	BM_INFO("str addr 0x%lX end addr 0x%lX min data 0x%lX max data 0x%lX\n", start_addr, end_addr, min_data, max_data);
+	BM_INFO("str addr 0x%lX end addr 0x%lX min data 0x%lX max data 0x%lX\n",
+		start_addr, end_addr, min_data, max_data);
 	if((channel > 3) || (chn_sel > 4) || (start_addr > end_addr) || (min_data > max_data))
 		return -EINVAL;
 
@@ -1046,13 +1200,83 @@ static ssize_t sci_bm_ahb_dbg_store(struct device *dev,
 	return strnlen(buf, count);
 }
 
+static enum hrtimer_restart hrtimer_putlog_handler(struct hrtimer *timer)
+{
+	ulong bm_index, rwbw_cnt, bm_chn, bm_reg, bm_int;
+	struct bm_per_info *bm_info;
+	struct timeval tv;
+	struct rtc_time tm;
+	bm_info = (struct bm_per_info *)per_buf;
+	bm_reg = __sci_get_bm_base(AXI_BM0);
+	if(__raw_readl((volatile void *)(bm_reg + AXI_BM_INTC_REG)) & BM_CNT_EN)
+	{
+		if(bm_info == NULL){
+			BM_ERR("BM irq ERR, trigger info: int 0x%x,\
+				min addr 0x%x, max addr 0x%x, cnt len 0x%x\n",
+				__raw_readl((volatile void *)(bm_reg + AXI_BM_INTC_REG)),
+				__raw_readl((volatile void *)(bm_reg + AXI_BM_ADDR_MIN_REG)),
+				__raw_readl((volatile void *)(bm_reg + AXI_BM_ADDR_MAX_REG)),
+				__raw_readl((volatile void *)(bm_reg + AXI_BM_CNT_WIN_LEN_REG)));
+			return HRTIMER_NORESTART;
+		}
+
+		rwbw_cnt = 0x0;
+		/*count stop time stamp */
+		do_gettimeofday(&tv);
+		bm_info[buf_write_index].t_stop = tv.tv_usec;
+		bm_info[buf_write_index].count = bm_count;
+
+		for (bm_chn = AXI_BM0; bm_chn <= AXI_BM9; bm_chn++) {
+			bm_reg = __sci_get_bm_base(bm_chn);
+			bm_info[buf_write_index].per_data[bm_chn][0] =
+				__raw_readl((volatile void *)(bm_reg + AXI_BM_RTRANS_IN_WIN_REG));
+			bm_info[buf_write_index].per_data[bm_chn][1] =
+				__raw_readl((volatile void *)(bm_reg + AXI_BM_RBW_IN_WIN_REG));
+			bm_info[buf_write_index].per_data[bm_chn][2] =
+				__raw_readl((volatile void *)(bm_reg + AXI_BM_RLATENCY_IN_WIN_REG));
+
+			bm_info[buf_write_index].per_data[bm_chn][3] =
+				__raw_readl((volatile void *)(bm_reg + AXI_BM_WTRANS_IN_WIN_REG));
+			bm_info[buf_write_index].per_data[bm_chn][4] =
+				__raw_readl((volatile void *)(bm_reg + AXI_BM_WBW_IN_WIN_REG));
+			bm_info[buf_write_index].per_data[bm_chn][5] =
+				__raw_readl((volatile void *)(bm_reg + AXI_BM_WLATENCY_IN_WIN_REG));
+
+			rwbw_cnt += bm_info[buf_write_index].per_data[bm_chn][1];
+			rwbw_cnt += bm_info[buf_write_index].per_data[bm_chn][4];
+		}
+		buf_write_index++;
+		/*wake up the thread to output log per 4 second*/
+		if (buf_write_index == PER_COUNT_RECORD_SIZE)
+			{
+				buf_write_index = 0;
+				up(&bm_seam);
+			}
+		if(buf_write_index == (PER_COUNT_RECORD_SIZE >> 1))
+			{
+				up(&bm_seam);
+			}
+		/*count start time stamp */
+		do_gettimeofday(&tv);
+		rtc_time_to_tm(tv.tv_sec,&tm);
+		tm.tm_hour = tm.tm_hour < 16 ? (tm.tm_hour + 8) : (tm.tm_hour - 16);
+		bm_info[buf_write_index].t_start = tv.tv_usec;
+		bm_info[buf_write_index].tmp1	 = (tm.tm_hour * 10000) + (tm.tm_min * 100) + tm.tm_sec;
+		bm_info[buf_write_index].tmp2	 = 640;
+		hrtimer_forward_now(timer, ktime_set(0,timer_interval*1000000));
+		return HRTIMER_RESTART;
+	}
+	return HRTIMER_NORESTART;
+}
 static ssize_t sci_bm_bandwidth_store(struct device *dev,
 				struct device_attribute *attr, const char *buf,
 				size_t count)
 {
 	u32 bw_en, bm_index;
 	struct task_struct *t;
-
+	struct bm_per_info *bm_info;
+	struct timeval tv;
+	struct rtc_time tm;
 	bm_st_info.bm_dfs_off_st = false;
 	sscanf(buf, "%d", &bw_en);
 	if(bw_en){
@@ -1060,22 +1284,30 @@ static ssize_t sci_bm_bandwidth_store(struct device *dev,
 		bm_st_info.bm_dbg_st = false;
 		if(per_buf == NULL){
 			per_buf = kmalloc(PER_COUNT_BUF_SIZE, GFP_KERNEL);
-			if (!per_buf)
+			if (!per_buf){
 				BM_ERR("kmalloc failed!\n");
+				return -ENOMEM;
+				}
+			bm_info = (struct bm_per_info *)per_buf;
 			sema_init(&bm_seam, 0);
-			t = kthread_run(sci_bm_output_log, NULL, "%s", "bm_per_log");
-			if (IS_ERR(t)) {
-				BM_ERR("bm probe: Failed to run thread bm_per_log\n");
-				kthread_stop(t);
-				return 0;
-			}
-		}
-		for (bm_index = AXI_BM0; bm_index <= AHB_BM2; bm_index++) {
+			for (bm_index = AXI_BM0; bm_index <= AHB_BM2; bm_index++) {
 			__sci_bm_glb_reset_and_enable(bm_index, true);
 			bm_store_vale[bm_index].bm_mask= 0;
+			}
+			sci_bm_set_perform_point();
+			do_gettimeofday(&tv);
+			rtc_time_to_tm(tv.tv_sec,&tm);
+			tm.tm_hour = tm.tm_hour < 16 ? (tm.tm_hour + 8) : (tm.tm_hour - 16);
+			bm_info[buf_write_index].t_start = get_sys_cnt();
+			bm_info[buf_write_index].tmp1	 = (tm.tm_hour * 10000) + (tm.tm_min * 100) + tm.tm_sec;
+			bm_info[buf_write_index].tmp2	 = 640;
+			t = kthread_run(sci_bm_output_log, NULL, "%s", "bm_per_log");
+			if (IS_ERR_OR_NULL(t)) {
+				BM_ERR("bm probe: Failed to run thread bm_per_log\n");
+				kfree(per_buf);
+				return -EINVAL;
+			}
 		}
-		sci_bm_set_perform_point();
-		msleep(100);
 	}else{
 		BM_INFO("bm bandwidth mode disable!!!\n");
 		bm_st_info.bm_dbg_st = true;
@@ -1101,6 +1333,77 @@ static ssize_t sci_bm_bandwidth_store(struct device *dev,
 	return strnlen(buf, count);
 }
 
+static ssize_t sci_bm_bandwidth_timer_store(struct device *dev,
+				struct device_attribute *attr, const char *buf,
+				size_t count)
+{
+	u32 bm_index;
+	struct task_struct *t;
+	struct bm_per_info *bm_info;
+	struct timeval tv;
+	struct rtc_time tm;
+	bm_st_info.bm_dfs_off_st = false;
+	sscanf(buf, "%d", &timer_interval);
+	if(timer_interval){
+		BM_INFO("bm bandwidth mode enable!!!\n");
+		bm_st_info.bm_dbg_st = false;
+		if(per_buf == NULL){
+			per_buf = kmalloc(PER_COUNT_BUF_SIZE, GFP_KERNEL);
+			if (!per_buf){
+					BM_ERR("kmalloc failed!\n");
+					return -ENOMEM;
+				}
+			bm_info = (struct bm_per_info *)per_buf;
+			sema_init(&bm_seam, 0);
+			for (bm_index = AXI_BM0; bm_index <= AHB_BM2; bm_index++) {
+			__sci_bm_glb_reset_and_enable(bm_index, true);
+			bm_store_vale[bm_index].bm_mask= 0;
+			}
+			sci_bm_set_perform_point_nowinlen();
+			msleep(100);
+			hrtimer_init(&timer, CLOCK_REALTIME, HRTIMER_MODE_ABS);
+			do_gettimeofday(&tv);
+			rtc_time_to_tm(tv.tv_sec,&tm);
+			tm.tm_hour = tm.tm_hour < 16 ? (tm.tm_hour + 8) : (tm.tm_hour - 16);
+			bm_info[buf_write_index].t_start = tv.tv_usec;
+			bm_info[buf_write_index].tmp1	 = (tm.tm_hour * 10000) + (tm.tm_min * 100) + tm.tm_sec;
+			bm_info[buf_write_index].tmp2	 = 640;
+			timer.function = hrtimer_putlog_handler;
+			hrtimer_start(&timer,ktime_set(0,timer_interval*1000000), HRTIMER_MODE_ABS);
+			t = kthread_run(sci_bm_output_log, NULL, "%s", "bm_per_log");
+			if (IS_ERR_OR_NULL(t)) {
+				BM_ERR("bm probe: Failed to run thread bm_per_log\n");
+				kfree(per_buf);
+				return -EINVAL;
+			}
+		}
+	}else{
+		BM_INFO("bm bandwidth mode disable!!!\n");
+		bm_st_info.bm_dbg_st = true;
+		if(per_buf != NULL){
+			kfree(per_buf);
+			per_buf = NULL;
+			if(log_file != NULL){
+				filp_close(log_file, NULL);
+				log_file = NULL;
+				buf_write_index = 0;
+				bm_count = 0;
+			}
+		}
+		__sci_axi_bm_cnt_clr();
+		__sci_bm_int_clr();
+		__sci_bm_glb_count_enable(false);
+		for (bm_index = AXI_BM0; bm_index <= AHB_BM2; bm_index++) {
+			__sci_bm_glb_reset_and_enable(bm_index, false);
+			bm_store_vale[bm_index].bm_mask= 0;
+		}
+		__sci_bm_glb_count_enable(false);
+		hrtimer_cancel(&timer);
+	}
+	return strnlen(buf, count);
+}
+
+
 static ssize_t sci_bm_occur_show(struct device *dev,
 			struct device_attribute *attr,  char *buf)
 {
@@ -1110,7 +1413,8 @@ static ssize_t sci_bm_occur_show(struct device *dev,
 
 	for(bm_index = AXI_BM0; bm_index < BM_SIZE; bm_index++){
 		if(debug_bm_int_info[bm_index].msk_addr != 0){
-			sprintf(occ_info, " %s\n addr: 0x%X\n CMD: 0x%X\n msk_data_l: 0x%X\n msk_data_h: 0x%X\n id 0x%X\n",
+			sprintf(occ_info, " %s\n addr: 0x%X\n CMD: 0x%X\n\
+				msk_data_l: 0x%X\n msk_data_h: 0x%X\n id 0x%X\n",
 				bm_chn_name[bm_index].chn_name,
 				debug_bm_int_info[bm_index].msk_addr,
 				debug_bm_int_info[bm_index].msk_cmd,
@@ -1135,7 +1439,8 @@ static ssize_t sci_bm_continue_show(struct device *dev,
 
 	for(bm_index = 0; bm_index < bm_ctn_dbg.loop_cnt; bm_index++){
 		if(bm_ctn_dbg.bm_ctn_info[bm_index].msk_addr != 0){
-			sprintf(occ_info, " %d\n addr: 0x%X\n CMD: 0x%X\n msk_data_l: 0x%X\n msk_data_h: 0x%X\n id 0x%X\n",
+			sprintf(occ_info, " %d\n addr: 0x%X\n CMD: 0x%X\n\
+				msk_data_l: 0x%X\n msk_data_h: 0x%X\n id 0x%X\n",
 				bm_ctn_dbg.bm_ctn_info[bm_index].bm_index,
 				bm_ctn_dbg.bm_ctn_info[bm_index].msk_addr,
 				bm_ctn_dbg.bm_ctn_info[bm_index].msk_cmd,
@@ -1281,6 +1586,70 @@ static ssize_t sci_bm_bus_status_show(struct device * dev,
 	return sprintf(buf, "%s\n", axi_buf);
 }
 
+static ssize_t sci_bm_noirq_ctrl_shore(struct device *dev,
+				struct device_attribute *attr, const char *buf,
+				size_t count)
+{
+	u32 bw_en, bm_index;
+	struct task_struct *t;
+
+	bm_st_info.bm_dfs_off_st = false;
+	sscanf(buf, "%d", &bw_en);
+	if(bw_en){
+		BM_INFO("bm bandwidth mode enable!!!\n");
+		noirq_en_flag = 1;
+		bm_st_info.bm_dbg_st = false;
+		if(per_buf == NULL){
+			per_buf = kmalloc(PER_COUNT_BUF_SIZE, GFP_KERNEL);
+			if (!per_buf)
+				BM_ERR("kmalloc failed!\n");
+			sema_init(&bm_seam, 0);
+			t = kthread_run(sci_bm_output_log, NULL, "%s", "bm_per_log");
+			if (IS_ERR_OR_NULL(t)) {
+				BM_ERR("bm probe: Failed to run thread bm_per_log\n");
+				kfree(per_buf);
+				return -EINVAL;
+			}
+		}
+		for (bm_index = AXI_BM0; bm_index <= AHB_BM2; bm_index++) {
+			__sci_bm_glb_reset_and_enable(bm_index, true);
+			bm_store_vale[bm_index].bm_mask= 0;
+		}
+		__sci_bm_init();
+		__sci_axi_bm_cnt_clr();
+		__sci_bm_int_clr();
+
+		__sci_axi_bm_clr_winlen();
+		__sci_bm_glb_count_enable(false);
+		__sci_axi_bm_cnt_start();
+		__sci_bm_glb_count_enable(true);
+		msleep(100);
+	}else{
+		BM_INFO("bm bandwidth mode disable!!!\n");
+		noirq_en_flag = 0;
+		bm_st_info.bm_dbg_st = true;
+		if(per_buf != NULL){
+			kfree(per_buf);
+			per_buf = NULL;
+			if(log_file != NULL){
+				filp_close(log_file, NULL);
+				log_file = NULL;
+				buf_write_index = 0;
+				bm_count = 0;
+			}
+		}
+		__sci_axi_bm_cnt_clr();
+		__sci_bm_int_clr();
+		__sci_bm_glb_count_enable(false);
+		for (bm_index = AXI_BM0; bm_index <= AHB_BM2; bm_index++) {
+			__sci_bm_glb_reset_and_enable(bm_index, false);
+			bm_store_vale[bm_index].bm_mask= 0;
+		}
+		__sci_bm_glb_count_enable(false);
+	}
+	return strnlen(buf, count);
+}
+
 static DEVICE_ATTR(state, S_IRUGO | S_IWUSR,
 	sci_bm_state_show, NULL);
 
@@ -1295,6 +1664,10 @@ static DEVICE_ATTR(ahb_dbg, S_IRUGO | S_IWUSR,
 
 static DEVICE_ATTR(bandwidth, S_IRUGO | S_IWUSR,
 	NULL, sci_bm_bandwidth_store);
+
+static DEVICE_ATTR(bandwidth_timer, S_IRUGO | S_IWUSR,
+	NULL, sci_bm_bandwidth_timer_store);
+
 
 static DEVICE_ATTR(occur, S_IRUGO | S_IWUSR,
 	sci_bm_occur_show, NULL);
@@ -1317,6 +1690,9 @@ static DEVICE_ATTR(disable, S_IRUGO | S_IWUSR,
 static DEVICE_ATTR(bus_status, S_IRUGO | S_IWUSR,
 	sci_bm_bus_status_show, NULL);
 
+static DEVICE_ATTR(noirqctrl, S_IRUGO | S_IWUSR,
+	NULL, sci_bm_noirq_ctrl_shore);
+
 
 static struct attribute *bm_attrs[] = {
 	&dev_attr_state.attr,
@@ -1324,6 +1700,7 @@ static struct attribute *bm_attrs[] = {
 	&dev_attr_axi_dbg.attr,
 	&dev_attr_ahb_dbg.attr,
 	&dev_attr_bandwidth.attr,
+	&dev_attr_bandwidth_timer.attr,
 	&dev_attr_occur.attr,
 	&dev_attr_continue.attr,
 	&dev_attr_dfs_off.attr,
@@ -1331,6 +1708,7 @@ static struct attribute *bm_attrs[] = {
 	&dev_attr_stack.attr,
 	&dev_attr_disable.attr,
 	&dev_attr_bus_status.attr,
+	&dev_attr_noirqctrl.attr,
 	NULL,
 };
 
@@ -1339,12 +1717,15 @@ static struct attribute_group bm_attr_group = {
 };
 
 #define BM_MAX(x, y) (x > y ? x : y)
+#define BM_MIN(x, y) (x == 0 ? y : (y == 0 ? x : (x > y ? y : x)))
 static int sci_bm_get_mem_layout(void)
 {
 	struct device_node *np = NULL;
+	struct device_node *cp_child = NULL;
 	struct resource res;
 	int ret;
 	char *devname;
+	char *cp_reg_name = NULL;
 
 	np = of_find_node_by_name(NULL, "memory");
 	if(np){
@@ -1361,6 +1742,39 @@ static int sci_bm_get_mem_layout(void)
 		if(!ret){
 			memory_layout.shm_start = res.start;
 			memory_layout.shm_end = res.end;
+		}
+		for_each_child_of_node(np, cp_child) {
+			of_property_read_string(cp_child, "sprd,name", (const char **)&cp_reg_name);
+			if(!strcmp("sipc-lte", cp_reg_name)){
+				ret = of_address_to_resource(cp_child, 1, &res);
+				if(!ret){
+					memory_layout.cpsipc_start = res.start;
+					memory_layout.cpsipc_end = res.end;
+				}
+				ret = of_address_to_resource(cp_child, 2, &res);
+				if(!ret){
+					memory_layout.smsg_start = res.start;
+					memory_layout.smsg_end = res.end;
+				}
+			}
+		}
+		if (memory_layout.smsg_start == 0x0) {
+			np = of_find_compatible_node(NULL, NULL, "sprd,sipc");
+			for_each_child_of_node(np, cp_child){
+				of_property_read_string(cp_child, "sprd,name", (const char **)&cp_reg_name);
+				if(!strcmp("sipc-w", cp_reg_name)){
+					ret = of_address_to_resource(cp_child, 1, &res);
+					if(!ret){
+						memory_layout.cpsipc_start = res.start;
+						memory_layout.cpsipc_end = res.end;
+					}
+					ret = of_address_to_resource(cp_child, 2, &res);
+					if(!ret){
+						memory_layout.smsg_start = res.start;
+						memory_layout.smsg_end = res.end;
+					}
+				}
+			}
 		}
 	}
 
@@ -1426,10 +1840,14 @@ static int sci_bm_get_mem_layout(void)
 	memory_layout.ap_start3 = BM_MAX(memory_layout.ap_start3, memory_layout.cpwcn_end);
 	memory_layout.ap_start3 = BM_MAX(memory_layout.ap_start3, memory_layout.cptl_end) + 1;
 
+	memory_layout.ap_end2 = BM_MIN(memory_layout.cpgge_start, memory_layout.cpw_start);
+	memory_layout.ap_end2 = BM_MIN(memory_layout.ap_end2, memory_layout.cpwcn_start);
+	memory_layout.ap_end2 = BM_MIN(memory_layout.ap_end2, memory_layout.cptl_start) - 1;
+
 	memory_layout.ap_start1 = memory_layout.dram_start;
 	memory_layout.ap_end1 = memory_layout.shm_start - 1;
 	memory_layout.ap_start2 = memory_layout.shm_end + 1;
-	memory_layout.ap_end2 = memory_layout.cpgge_start -1;
+	//memory_layout.ap_end2 = memory_layout.cpgge_start -1;
 	//memory_layout.ap_start3 = memory_layout.cptl_end + 1;
 	memory_layout.ap_end3 = memory_layout.fb_start -1;
 
@@ -1441,6 +1859,7 @@ static int sci_bm_get_mem_layout(void)
 	BM_ERR("%s: cpw : 0x%08X ~ 0x%08X\n", __func__, memory_layout.cpw_start, memory_layout.cpw_end);
 	BM_ERR("%s: cpwcn: 0x%08X ~ 0x%08X\n", __func__, memory_layout.cpwcn_start, memory_layout.cpwcn_end);
 	BM_ERR("%s: cptl: 0x%08X ~ 0x%08X\n", __func__, memory_layout.cptl_start, memory_layout.cptl_end);
+	BM_ERR("%s: smsg: 0x%08X ~ 0x%08X\n", __func__, memory_layout.smsg_start, memory_layout.smsg_end);
 	BM_ERR("%s: ap_3: 0x%08X ~ 0x%08X\n", __func__, memory_layout.ap_start3, memory_layout.ap_end3);
 	BM_ERR("%s: fb  : 0x%08X ~ 0x%08X\n", __func__, memory_layout.fb_start, memory_layout.fb_end);
 	BM_ERR("%s: ion : 0x%08X ~ 0x%08X\n", __func__, memory_layout.ion_start, memory_layout.ion_end);
@@ -1467,14 +1886,18 @@ static void sci_bm_init_name_info(void)
 			bm_chn_name[bm_chn].chn_name = "ERROR_NAME";
 	}
 	//init ahb bm name info.
-	for(bm_chn = bm_st_info.axi_bm_cnt; bm_chn < BM_AXI_TOTAL_CHN_NAME + BM_AHB_TOTAL_CHN_NAME + 3; bm_chn++){
-		for(bm_index = BM_AXI_TOTAL_CHN_NAME + 3; bm_index < BM_AXI_TOTAL_CHN_NAME + BM_AHB_TOTAL_CHN_NAME + 3; bm_index++){
+	for(bm_chn = bm_st_info.axi_bm_cnt;
+		bm_chn < BM_AXI_TOTAL_CHN_NAME + BM_AHB_TOTAL_CHN_NAME + 3; bm_chn++){
+		for(bm_index = BM_AXI_TOTAL_CHN_NAME + 3;
+			bm_index < BM_AXI_TOTAL_CHN_NAME + BM_AHB_TOTAL_CHN_NAME + 3; bm_index++){
 			if(bm_chn == ((*(&bm_st_info.bm_def_mode + bm_index)) + bm_st_info.axi_bm_cnt)){
 				bm_chn_name[bm_chn - bm_no_name].chn_name = bm_name_list[bm_index - 3].chn_name;
 				break;
 			}
+			if (NULL == bm_chn_name[bm_chn - bm_no_name].chn_name)
+				bm_chn_name[bm_chn - bm_no_name].chn_name = "ERROR_NAME";
 		}
-		if("ERROR_NAME" == bm_chn_name[bm_chn - bm_no_name].chn_name){
+		if (!strcmp(bm_chn_name[bm_chn - bm_no_name].chn_name, "ERROR_NAME")) {
 			//del the no name chn. to get a continue name list.
 			bm_no_name++;
 		}
@@ -1494,7 +1917,8 @@ static void sci_bm_get_hw_info(void)
 			bm_st_info.bm_def_mode = 0;
 		}else{
 			bm_st_info.bm_def_mode = val[0];
-			BM_INFO("Bus Monitor mode: 0 - Pref; 1 - Debug. Current mode %d\n", bm_st_info.bm_def_mode);
+			BM_INFO("Bus Monitor mode: 0 - Pref; 1 - Debug. Current mode %d\n",
+				bm_st_info.bm_def_mode);
 		}
 		if(of_property_read_u32_array(np, "sprd,bm_count", &val[0], 2)){
 			BM_WRN("it must be sure that the there is no count para!\n");
@@ -1689,8 +2113,10 @@ static int sci_bm_suspend(struct platform_device *pdev, pm_message_t state)
 	if(true == bm_st_info.bm_dbg_st){
 		for (bm_chn = AXI_BM0; bm_chn < BM_SIZE; bm_chn++){
 			reg_addr = __sci_get_bm_base(bm_chn);
-			bm_store_vale[bm_chn].str_addr = __raw_readl((volatile void *)(reg_addr + AXI_BM_ADDR_MIN_REG)) + (0x80000000 & bm_store_vale[bm_chn].bm_mask);
-			bm_store_vale[bm_chn].end_addr = __raw_readl((volatile void *)(reg_addr + AXI_BM_ADDR_MAX_REG)) + (0x80000000 & bm_store_vale[bm_chn].bm_mask);
+			bm_store_vale[bm_chn].str_addr = __raw_readl((volatile void *)
+				(reg_addr + AXI_BM_ADDR_MIN_REG)) + (0x80000000 & bm_store_vale[bm_chn].bm_mask);
+			bm_store_vale[bm_chn].end_addr = __raw_readl((volatile void *)
+				(reg_addr + AXI_BM_ADDR_MAX_REG)) + (0x80000000 & bm_store_vale[bm_chn].bm_mask);
 			bm_mode = __raw_readl((volatile void *)(reg_addr + AXI_BM_CFG_REG)) & 0x3;
 			if(0 == bm_mode)
 				bm_store_vale[bm_chn].mode = RW_MODE;
@@ -1699,8 +2125,10 @@ static int sci_bm_suspend(struct platform_device *pdev, pm_message_t state)
 			else if(3 == bm_mode)
 				bm_store_vale[bm_chn].mode = W_MODE;
 			if(bm_chn >= AHB_BM0){
-				bm_store_vale[bm_chn].min_data = __raw_readl((volatile void *)(reg_addr + AXI_BM_DATA_MIN_L_REG));
-				bm_store_vale[bm_chn].max_data = __raw_readl((volatile void *)(reg_addr + AXI_BM_DATA_MAX_L_REG));
+				bm_store_vale[bm_chn].min_data = __raw_readl((volatile void *)(reg_addr
+					+ AXI_BM_DATA_MIN_L_REG));
+				bm_store_vale[bm_chn].max_data = __raw_readl((volatile void *)(reg_addr
+					+ AXI_BM_DATA_MAX_L_REG));
 				bm_mode = sci_glb_read(REG_AP_AHB_MISC_CFG, 0xFFFFFFFF);
 				switch(bm_chn){
 					case AHB_BM0:
@@ -1730,7 +2158,9 @@ static int sci_bm_resume(struct platform_device *pdev)
 	__sci_bm_int_clr();
 	if(true == bm_st_info.bm_dbg_st){
 		for (bm_chn = AXI_BM0; bm_chn < BM_SIZE; bm_chn++){
-			if((0x00000000 == bm_store_vale[bm_chn].str_addr) && (0x00000000 == bm_store_vale[bm_chn].end_addr))
+			if (((0x00000000 == bm_store_vale[bm_chn].str_addr)
+				&& (0x00000000 == bm_store_vale[bm_chn].end_addr)) ||
+				!strcmp(bm_chn_name[bm_chn].chn_name, "ERROR_NAME"))
 				continue;
 			bm_cfg.addr_min = bm_store_vale[bm_chn].str_addr;
 			bm_cfg.addr_max = bm_store_vale[bm_chn].end_addr;
@@ -1941,16 +2371,16 @@ static long sci_bm_ioctl(struct file *filp, unsigned int cmd, unsigned long args
 			bm_ctn_dbg.bm_continue_dbg = false;
 			break;
 		case BM_DFS_SET://set DFS statue
+			bm_st_info.bm_dfs_off_st = true;
+			break;
 		case BM_DFS_UNSET:
-			if(get_user(bm_user,(unsigned long __user *)(&args)))
-				return -EFAULT;
-			bm_st_info.bm_dfs_off_st = bm_user;
+			bm_st_info.bm_dfs_off_st = false;
 			break;
 		case BM_PANIC_SET://set DFS statue
+			bm_st_info.bm_panic_st = true;
+			break;
 		case BM_PANIC_UNSET:
-			if(get_user(bm_user,(unsigned long __user *)(&args)))
-				return -EFAULT;
-			bm_st_info.bm_panic_st = bm_user;
+			bm_st_info.bm_panic_st = false;
 			break;
 		case BM_BW_CNT_START:
 			dmc_mon_cnt_start();
@@ -2103,6 +2533,9 @@ EXPORT_SYMBOL_GPL(dmc_mon_cnt_clr);
 EXPORT_SYMBOL_GPL(dmc_mon_cnt_start);
 EXPORT_SYMBOL_GPL(dmc_mon_cnt_stop);
 EXPORT_SYMBOL_GPL(dmc_mon_resume);
+EXPORT_SYMBOL_GPL(sci_bm_noirq_ctrl);
+EXPORT_SYMBOL_GPL(sprd_bm_monitor_cp);
+
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("eric.long<eric.long@spreadtrum.com>");
