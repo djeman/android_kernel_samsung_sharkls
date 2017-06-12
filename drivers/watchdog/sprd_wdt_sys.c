@@ -64,6 +64,11 @@ static unsigned long wdt_enabled;
 #define wdt_feed_all() FEED_ALL_WDG(chip_margin, ap_margin, apcore_margin, apcore_irq_margin)
 
 extern int in_calibration(void);
+
+#ifdef CONFIG_SEC_DEBUG
+#include <soc/sprd/sec_debug.h>
+#endif
+
 #ifndef CONFIG_SPRD_WATCHDOG_SYS_FIQ
 static irqreturn_t sprd_wdg_isr(int irq, void *dev_id)
 {
@@ -199,7 +204,10 @@ static void wdt_start(void)
 
 static int  sci_wdt_kfeeder_init(void)
 {
-
+#ifdef CONFIG_SEC_DEBUG
+	if(sec_debug_level.en.kernel_fault)
+		return -1;
+#endif
 
 #if 0
 	feed_task = kthread_create(watchdog_feeder, NULL, "watchdog_feeder");
@@ -239,7 +247,10 @@ static void  sci_wdt_kfeeder_exit(void)
 int param_set_enabled(const char *val, struct kernel_param *kp)
 {
 	int ret;
-
+#ifdef CONFIG_SEC_DEBUG
+	if(sec_debug_level.en.kernel_fault)
+		return true;
+#endif
 	ret = param_set_ulong(val, kp);
 	if (ret < 0)
 		return ret;
@@ -474,13 +485,18 @@ static int __init sci_wdt_init(void)
 {
 	int ret = 0;
 
+#ifdef CONFIG_SEC_DEBUG
+	if(sec_debug_level.en.kernel_fault)
+		return -1;
+#endif
+
 	if (wdt_init())
 		goto wdt_out;
 
 	boot_status = 0;
 	pr_info("sprd Watchdog: userspace watchdog feeder\n");
 
-	 platform_driver_register(&sprd_wdt_driver);
+	platform_driver_register(&sprd_wdt_driver);
 
 	return 0;
 wdt_out:
