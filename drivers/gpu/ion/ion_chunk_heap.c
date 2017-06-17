@@ -182,7 +182,7 @@ struct ion_heap *ion_chunk_heap_create(struct ion_platform_heap *heap_data)
 		struct page *page = phys_to_page(chunk_heap->base + i);
 		struct page **pages = &page;
 
-		ret = map_vm_area(vm_struct, pgprot, pages);
+		ret = map_vm_area(vm_struct, pgprot, &pages);
 		if (ret)
 			goto error_map_vm_area;
 		memset(vm_struct->addr, 0, PAGE_SIZE);
