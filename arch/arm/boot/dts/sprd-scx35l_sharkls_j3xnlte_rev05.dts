@@ -12,7 +12,7 @@
 /memreserve/ 0x87800000 0x500000; /* Offset:120M, Size:5M*/
 
 /* memory reserved for LTE modem */
-/memreserve/ 0x89600000 0x4280000; /* Offset:150M, Size:64.5M*/
+/memreserve/ 0x89600000 0x4380000; /* Offset:150M, Size:64.5M*/
 
 /* memory reserved for carveout mm (zsl)  */
 /memreserve/ 0x9B23B000 0x3939000; /* 8M*1.5*5, 4K alignment*/
@@ -794,7 +794,7 @@
 		//#interrupt-cells = <2>;
 		#address-cells = <1>;
 		#size-cells = <1>;
-		ranges = <0x09600000 0x89600000 0x4280000>,
+		ranges = <0x09600000 0x89600000 0x4380000>,
 				<0x07800000 0x87800000 0x500000>,
 				<0x01440000 0x8AA40000 0x1000>,
 				<0x5000c000 0x5000c000 0x1000>;
@@ -804,7 +804,7 @@
 			sprd,dst = <5>;
 			/* it's unnecessary to config IPI info upon mailbox arch */
 			mailbox,core = <7>;
-			reg = <0x09600000 0x4280000> , /* <CP_start_addr size> */
+			reg = <0x09600000 0x4380000> , /* <CP_start_addr size> */
 				<0x07800000 0x500000>, /* <SMEM_phy_addr total_size> */
 				<0x01440000 0x1000>; /* smsg ring buffer <base size> */
           };
@@ -988,7 +988,7 @@
 		sprd,ctrl-reg = <0x0c 0xcc 0xb0 0x78>; /* <shut_down deep_sleep reset get_status> */
 		sprd,ctrl-mask = <0x100000 0x140000 0x02 0x1>; /* masks <> */
 		sprd,iram-data = <0xe59f0000 0xe12fff10 0x8AB88000>; /* 3rd param equals modem_addr*/
-		reg = <0x89600000 0x4280000>, /* <CP_start_addr total_size> = <+128M 83M> */
+		reg = <0x89600000 0x4380000>, /* <CP_start_addr total_size> = <+128M 83M> */
 			<0x50001000 0x0c>, /* <iram1_base size> */
 			<0x402e0000 0x100>, /* <aon_apb_base size> */
                         <0x402b0000 0x100>, /* <pmu_base size> */
@@ -1002,7 +1002,7 @@
 		ranges = <0x1588000 0x8AB88000 0x00C30000>,
 			 <0x0020000 0x89620000 0x002E0000>,
                          <0x0300000 0x89900000 0x1C0000>,
-			 <0x3B00000 0x8D100000 0x200000>,
+			 <0x3B00000 0x8D100000 0x300000>,
 			 <0x1441800 0x8AA41800 0x800>,
 			 <0x1442000 0x8AA42000 0x90000>,
 			 <0x14D2000 0x8AAD2000 0xB4000>;
@@ -1020,7 +1020,7 @@
 		};
 		modem@0x3B00000 {
 			cproc,name = "warm";
-			reg = <0x3B00000 0x200000>;/* <modem_addr size>*/
+			reg = <0x3B00000 0x300000>;/* <modem_addr size>*/
 		};
 		cpcmdline@0x1441800 {
 			cproc,name = "cpcmdline";
