@@ -220,7 +220,7 @@ static long rot_k_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			up(&rot_private->start_sem);
 			goto ioctl_exit;
 		}
-
+		dcam_rotation_start();
 		ret = rot_k_start(fd);
 		if (ret) {
 			printk("rot_k_ioctl error: failed start \n");
@@ -254,6 +254,7 @@ static long rot_k_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		printk("rot_k_ioctl error: rot_k_thread  wait error \n");
 		goto ioctl_out;
 		}
+		dcam_rotation_end();
 
 		rot_k_close();
 

@@ -134,8 +134,6 @@ int rot_k_isr(struct dcam_frame* dcam_frm, void* u_data)
 		goto isr_exit;
 	}
 
-	dcam_rotation_end();
-
 	spin_lock_irqsave(&private->rot_drv_lock, flag);
 	user_isr_func = private->user_isr_func;
 	if (user_isr_func) {
@@ -262,7 +260,6 @@ int rot_k_set_UV_param(ROT_PARAM_CFG_T *s)
 void rot_k_register_cfg(ROT_PARAM_CFG_T *s)
 {
 	rot_k_ahb_reset();
-	dcam_rotation_start();
 	rot_k_set_src_addr(s->s_addr);
 	rot_k_set_dst_addr(s->d_addr);
 	rot_k_set_img_size(&(s->img_size));
