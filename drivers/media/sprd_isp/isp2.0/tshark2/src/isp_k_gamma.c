@@ -15,6 +15,7 @@
 #include <linux/vmalloc.h>
 #include <linux/sprd_mm.h>
 #include <video/sprd_isp.h>
+#include <soc/sprd/arch_misc.h>
 #include "isp_reg.h"
 #include "isp_drv.h"
 
@@ -53,25 +54,26 @@ static int32_t isp_k_pingpang_frgb_gamc(struct coordinate_xy *nodes,
 		isp_private->full_gamma_buf_id = ISP_FRGB_GAMC_BUF0;
 	}
 
-#if defined(CONFIG_ARCH_SCX30G3)
-	for(i = 0,j = 0; i < (ISP_PINGPANG_FRGB_GAMC_NUM - 1); i++, j+= 4) {
-		gamma_node = (((p_nodes[i].node_y & 0xFF) << 8) | (p_nodes[i + 1].node_y & 0xFF)) & 0xFFFF;
-		REG_WR(r_buf_addr + j, gamma_node);
-		REG_WR(g_buf_addr + j, gamma_node);
-		REG_WR(b_buf_addr + j, gamma_node);
-	}
-#else
-	for(i = 0, j = 0; i < ISP_PINGPANG_FRGB_GAMC_NODE; i++, j+= 4) {
-		if (i < ISP_PINGPANG_FRGB_GAMC_NODE - 1) {
-			gamma_node = (p_nodes[i * 2].node_y + p_nodes[i * 2 + 1].node_y) >> 1;
-		} else {
-			gamma_node = p_nodes[i * 2 -1].node_y;
+	if (soc_is_scx9832a_v0() || soc_is_scx30g3_v0()) {
+		for(i = 0,j = 0; i < (ISP_PINGPANG_FRGB_GAMC_NUM - 1); i++, j+= 4) {
+			gamma_node = (((p_nodes[i].node_y & 0xFF) << 8) | (p_nodes[i + 1].node_y & 0xFF)) & 0xFFFF;
+			REG_WR(r_buf_addr + j, gamma_node);
+			REG_WR(g_buf_addr + j, gamma_node);
+			REG_WR(b_buf_addr + j, gamma_node);
 		}
-		REG_WR(r_buf_addr + j, gamma_node & 0xff);
-		REG_WR(g_buf_addr + j, gamma_node & 0xff);
-		REG_WR(b_buf_addr + j, gamma_node & 0xff);
+	} else {
+		for(i = 0, j = 0; i < ISP_PINGPANG_FRGB_GAMC_NODE; i++, j+= 4) {
+			if (i < ISP_PINGPANG_FRGB_GAMC_NODE - 1) {
+				gamma_node = (p_nodes[i * 2].node_y + p_nodes[i * 2 + 1].node_y) >> 1;
+			} else {
+				gamma_node = p_nodes[i * 2 -1].node_y;
+			}
+			REG_WR(r_buf_addr + j, gamma_node & 0xff);
+			REG_WR(g_buf_addr + j, gamma_node & 0xff);
+			REG_WR(b_buf_addr + j, gamma_node & 0xff);
+		}
 	}
-#endif
+
 	val = ((isp_private->full_gamma_buf_id & 0x1 ) << 1) | ((isp_private->full_gamma_buf_id & 0x1) << 2) | ((isp_private->full_gamma_buf_id & 0x1 ) << 3);
 	REG_MWR(ISP_GAMMA_PARAM, 0x0000000E, val);
 

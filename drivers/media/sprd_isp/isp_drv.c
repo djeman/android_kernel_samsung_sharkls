@@ -38,6 +38,7 @@
 #include "compat_isp_drv.h"
 #include "isp_drv.h"
 #include "isp_reg.h"
+//#include <video/sprd_cam_pw_domain.h>
 
 #define ISP_MINOR MISC_DYNAMIC_MINOR
 
@@ -50,7 +51,7 @@ static int32_t isp_block_buf_alloc(struct isp_k_private *isp_private)
 	int32_t ret = 0;
 	uint32_t buf_len = 0;
 
-	buf_len = ISP_REG_BUF_SIZE + ISP_RAW_AE_BUF_SIZE + ISP_FRGB_GAMMA_BUF_SIZE + ISP_YUV_YGAMMA_BUF_SIZE + ISP_RAW_AWB_BUF_SIZE + ISP_YIQ_AEM_BUF_SIZE;
+	buf_len = ISP_REG_BUF_SIZE + ISP_FRGB_GAMMA_BUF_SIZE + ISP_YUV_YGAMMA_BUF_SIZE + ISP_RAW_AWB_BUF_SIZE + ISP_YIQ_AEM_BUF_SIZE;
 
 	isp_private->block_buf_addr = (unsigned long)vzalloc(buf_len);
 	if (0 == isp_private->block_buf_addr) {
@@ -60,9 +61,7 @@ static int32_t isp_block_buf_alloc(struct isp_k_private *isp_private)
 		isp_private->block_buf_len = buf_len;
 		isp_private->reg_buf_addr = isp_private->block_buf_addr;
 		isp_private->reg_buf_len = ISP_REG_BUF_SIZE;
-		isp_private->raw_aem_buf_addr = isp_private->reg_buf_addr + isp_private->reg_buf_len;
-		isp_private->raw_aem_buf_len = ISP_RAW_AE_BUF_SIZE;
-		isp_private->full_gamma_buf_addr = isp_private->raw_aem_buf_addr + isp_private->raw_aem_buf_len;
+		isp_private->full_gamma_buf_addr = isp_private->reg_buf_addr + isp_private->reg_buf_len;
 		isp_private->full_gamma_buf_len = ISP_FRGB_GAMMA_BUF_SIZE;
 		isp_private->yuv_ygamma_buf_addr = isp_private->full_gamma_buf_addr + isp_private->full_gamma_buf_len;
 		isp_private->yuv_ygamma_buf_len = ISP_YUV_YGAMMA_BUF_SIZE;
@@ -86,8 +85,6 @@ static int32_t isp_block_buf_free(struct isp_k_private *isp_private)
 		isp_private->block_buf_len = 0x00;
 		isp_private->reg_buf_addr = 0x00;
 		isp_private->reg_buf_len = 0x00;
-		isp_private->raw_aem_buf_addr = 0x00;
-		isp_private->raw_aem_buf_len = 0x00;
 		isp_private->full_gamma_buf_addr = 0x00;
 		isp_private->full_gamma_buf_len = 0x00;
 		isp_private->yuv_ygamma_buf_addr = 0x00;
@@ -99,80 +96,6 @@ static int32_t isp_block_buf_free(struct isp_k_private *isp_private)
 	return ret;
 }
 
-static int32_t isp_yiq_antiflicker_buf_free(struct isp_k_private *isp_private)
-{
-	int32_t ret = 0;
-
-	if ((0x00 != isp_private->yiq_antiflicker_buf_addr)
-		&& (0x00 != isp_private->yiq_antiflicker_order)) {
-		free_pages(isp_private->yiq_antiflicker_buf_addr, isp_private->yiq_antiflicker_order);
-		isp_private->yiq_antiflicker_buf_addr = 0x00;
-		isp_private->yiq_antiflicker_len = 0x00;
-		isp_private->yiq_antiflicker_order = 0x00;
-	}
-
-	return ret;
-
-}
-
-static int32_t isp_yiq_antiflicker_buf_alloc(struct isp_k_private *isp_private, uint32_t len)
-{
-		int32_t ret = 0x00;
-#ifndef CONFIG_64BIT
-		uint32_t buf = 0x00;
-		void *ptr = NULL;
-#endif
-
-		if (0x00 < len) {
-			isp_private->yiq_antiflicker_len = len;
-			isp_private->yiq_antiflicker_order = get_order(len);
-			isp_private->yiq_antiflicker_buf_addr = (unsigned long)__get_free_pages(GFP_KERNEL | __GFP_COMP, isp_private->yiq_antiflicker_order);
-			if (NULL == (void*)isp_private->yiq_antiflicker_buf_addr) {
-				printk("isp_yiq_antiflicker_buf_alloc: memory error, addr:0x%lx, len:0x%x, order:0x%x.\n",
-					isp_private->yiq_antiflicker_buf_addr,
-					isp_private->yiq_antiflicker_len,
-					isp_private->yiq_antiflicker_order);
-				return -1;
-			}
-#ifndef CONFIG_64BIT
-			ptr = (void*)isp_private->yiq_antiflicker_buf_addr;
-			buf = virt_to_phys((volatile void *)isp_private->yiq_antiflicker_buf_addr);
-
-			dmac_flush_range(ptr, ptr + len);
-			outer_flush_range(__pa(ptr), __pa(ptr) + len);
-#endif
-		}
-
-		return ret;
-
-}
-
-#if 0
-static int32_t isp_b4awb_switch_buf(struct isp_k_private *isp_private)
-{
-	int32_t ret = 0;
-
-	/*first bypass b4awb*/
-	REG_MWR(ISP_BINNING_PARAM, BIT_0, 0x1);
-
-	/*switch buf*/
-	if (isp_private->b4awb_buf[0].buf_flag == 1) {
-		isp_private->b4awb_buf[1].buf_flag = 1;
-		REG_WR(ISP_BINNING_MEM_ADDR, isp_private->b4awb_buf[1].buf_phys_addr);
-		isp_private->b4awb_buf[0].buf_flag = 0;
-	} else if (isp_private->b4awb_buf[1].buf_flag == 1) {
-		isp_private->b4awb_buf[0].buf_flag = 1;
-		REG_WR(ISP_BINNING_MEM_ADDR, isp_private->b4awb_buf[0].buf_phys_addr);
-		isp_private->b4awb_buf[1].buf_flag = 0;
-	}
-
-	/*enable b4awb*/
-	REG_MWR(ISP_BINNING_PARAM, BIT_0, 0x0);
-
-	return ret;
-}
-#endif
-
 static void isp_read_reg(struct isp_reg_bits *reg_bits_ptr, uint32_t counts)
 {
 	uint32_t i = 0;
@@ -180,16 +103,9 @@ static void isp_read_reg(struct isp_reg_bits *reg_bits_ptr, uint32_t counts)
 
 	for (i = 0; i < counts; i++) {
 		reg_addr = ISP_BASE_ADDR + reg_bits_ptr[i].reg_addr;
-		if((reg_addr >= ISP_BASE_ADDR) && (reg_addr <= (ISP_BASE_ADDR + 0xFFFFFUL)))
-		{
-			reg_val = REG_RD(reg_addr);
-			reg_bits_ptr[i].reg_value = reg_val;
-			reg_bits_ptr[i].reg_addr = isp_phybase + reg_bits_ptr[i].reg_addr;
-		} 
-		else
-		{
-			 printk("isp_read_reg: This is not ISP reg address %d\n",reg_addr); 	   
-		}
+		reg_val = REG_RD(reg_addr);
+		reg_bits_ptr[i].reg_value = reg_val;
+		reg_bits_ptr[i].reg_addr = reg_addr;
 	}
 }
 
@@ -201,14 +117,7 @@ static void isp_write_reg(struct isp_reg_bits *reg_bits_ptr, uint32_t counts)
 	for (i = 0; i < counts; i++) {
 		reg_addr = reg_bits_ptr[i].reg_addr + ISP_BASE_ADDR;
 		reg_val = reg_bits_ptr[i].reg_value;
-		if((reg_addr >= ISP_BASE_ADDR) && (reg_addr <= (ISP_BASE_ADDR + 0xFFFFFUL)))
-		{
-			REG_WR(reg_addr, reg_val);
-		}
-		else
-		{
-			printk("isp_write_reg: This is not ISP reg address %d\n",reg_addr);        
-		}
+		REG_WR(reg_addr, reg_val);
 	}
 }
 
@@ -260,6 +169,8 @@ static int32_t isp_queue_read(struct isp_queue *queue, struct isp_node *node)
 		*node = *queue->read++;
 		if (queue->read > &queue->node[ISP_QUEUE_LENGTH-1])
 			queue->read = &queue->node[0];
+	} else {
+		memset(node, 0, sizeof(*node));
 	}
 
 	return 0;
@@ -287,6 +198,9 @@ static int32_t isp_set_clk(struct isp_k_file *file, enum isp_clk_sel clk_sel)
 	case ISP_CLK_480M:
 		parent = "clk_usbpll";
 		break;
+	case ISP_CLK_468M:
+		parent = "clk_468m";
+		break;
 	case ISP_CLK_384M:
 		parent = "clk_384m";
 		break;
@@ -308,6 +222,10 @@ static int32_t isp_set_clk(struct isp_k_file *file, enum isp_clk_sel clk_sel)
 	case ISP_CLK_NONE:
 		printk("isp_set_clk: close clock %d\n", (int)clk_get_rate(isp_private->clock));
 		if (isp_private->clock) {
+#if defined(CONFIG_ARCH_WHALE)
+			printk("ISP change clk before disable \n");
+			clk_set_parent(isp_private->clock, parse_clk(isp_private->dn, "clk_76p8m"));
+#endif
 			clk_disable(isp_private->clock);
 			clk_put(isp_private->clock);
 			isp_private->clock = NULL;
@@ -327,8 +245,11 @@ static int32_t isp_set_clk(struct isp_k_file *file, enum isp_clk_sel clk_sel)
 	} else {
 		clk_disable(isp_private->clock);
 	}
-
+#if defined(CONFIG_ARCH_WHALE)
+	clk_parent = parse_clk(isp_private->dn, parent);
+#else
 	clk_parent = clk_get(NULL, parent);
+#endif
 	if (IS_ERR(clk_parent)) {
 		printk("isp_set_clk: clk_get error %d\n", (int)clk_parent);
 		return -1;
@@ -401,16 +322,19 @@ static int32_t isp_module_eb(struct isp_k_file *file)
 
 	if (0x01 == atomic_inc_return(&isp_private->users)) {
 
+		//ret = cam_pw_on(CAM_PW_DOMAIN_ISP);
 		ret = clk_mm_i_eb(isp_private->dn, 1);
 		if (unlikely(0 != ret)) {
 			ret = -1;
 			printk("isp_module_eb: clk_mm_i_eb error.\n");
 		}
 
-	#if defined(CONFIG_MACH_SP7720EA) || defined(CONFIG_MACH_SP7720EB) || defined(CONFIG_MACH_PIKEB_J1MINI_3G) || defined(CONFIG_MACH_PIKEB_J1_3G) || defined(CONFIG_MACH_SP7720EB_PRIME)
+	#if defined(CONFIG_ARCH_SCX20)
 		ret = isp_set_clk(file, ISP_CLK_256M);
 	#elif defined(CONFIG_ARCH_SCX35LT8)
 		ret = isp_set_clk(file, ISP_CLK_480M);
+	#elif defined(CONFIG_ARCH_WHALE)
+		ret = isp_set_clk(file, ISP_CLK_468M);
 	#else
 		ret = isp_set_clk(file, ISP_CLK_312M);
 	#endif
@@ -448,6 +372,7 @@ static int32_t isp_module_dis(struct isp_k_file *file)
 		}
 
 		ret = clk_mm_i_eb(isp_private->dn, 0);
+		//ret = cam_pw_off(CAM_PW_DOMAIN_ISP);
 		if (unlikely(0 != ret)) {
 			ret = -1;
 			printk("isp_module_dis: close clk_mm_i error.\n");
@@ -483,10 +408,7 @@ static irqreturn_t isp_isr(int irq, void *dev_id)
 	memset(&node, 0x00, sizeof(node));
 	ret = isp_get_int_num(&node);
 
-	/*B4AWB INT*/
-	/*if (node.irq_val1 & BIT_18) {
-		isp_b4awb_switch_buf(fd->isp_private);
-	}*/
+	ret = isp_k_switch_bq_buf(fd->isp_private, (struct isp_node *)&node);
 
 	ktime_get_ts(&ts);
 	node.time.sec = ts.tv_sec;
@@ -506,15 +428,27 @@ static irqreturn_t isp_isr(int irq, void *dev_id)
 static int32_t isp_register_irq(struct isp_k_file *file)
 {
 	int32_t ret = 0;
+	int    irq;
 
+#if defined(CONFIG_ARCH_WHALE)
+	irq = isp_parseinfo[get_module_selectindex(MODULE_ISP)].irq;
+	ret = request_irq(irq, isp_isr, IRQF_SHARED, "ISP", (void *)file);
+#else
 	ret = request_irq(ISP_IRQ, isp_isr, IRQF_SHARED, "ISP", (void *)file);
-
+#endif
 	return ret;
 }
 
 static void isp_unregister_irq(struct isp_k_file *file)
 {
+		int    irq;
+
+#if defined(CONFIG_ARCH_WHALE)
+	irq = isp_parseinfo[get_module_selectindex(MODULE_ISP)].irq;
+	free_irq (irq, (void *)file);
+#else
 	free_irq (ISP_IRQ, (void *)file);
+#endif
 }
 
 static int isp_open (struct inode *node, struct file *file)
@@ -556,6 +490,13 @@ static int isp_open (struct inode *node, struct file *file)
 		up(&isp_private->device_lock);
 		printk("isp_open: isp_queue_init error.\n");
 		return ret;
+	}
+
+	ret = isp_k_create_bq_thread(isp_private);
+	if (unlikely(ret != 0)) {
+		printk("isp_open: isp_k_create_bq_thread error.\n");
+		ret = -EIO;
+		goto open_exit;
 	}
 
 	ret = isp_module_eb(fd);
@@ -629,6 +570,8 @@ static int isp_release (struct inode *node, struct file *file)
 
 	ret = isp_module_dis(fd);
 
+	isp_k_stop_bq_thread(isp_private);
+
 	up(&isp_private->ioctl_lock);
 
 fd_free:
@@ -693,6 +636,7 @@ static long isp_ioctl( struct file *file, unsigned int cmd, unsigned long param)
 			return ret;
 		}
 
+		memset(&node, 0, sizeof(node));
 		ret = isp_queue_read(&drv_private->queue, &node);
 		if (0 != ret) {
 			ret = -EFAULT;
@@ -816,6 +760,7 @@ static long isp_ioctl( struct file *file, unsigned int cmd, unsigned long param)
 
 		isp_private->full_gamma_buf_id = 0;
 		isp_private->yuv_ygamma_buf_id = 0;
+		isp_private->is_vst_ivst_update = 1;
 
 		up(&isp_private->ioctl_lock);
 
@@ -952,20 +897,9 @@ static int isp_probe(struct platform_device *pdev)
 
 	s_isp_private = isp_private;
 
-	ret = isp_yiq_antiflicker_buf_alloc(isp_private, ISP_YIQ_ANTIFLICKER_SIZE);
-	if (ret) {
-		ret = -ENOMEM;
-		isp_block_buf_free(isp_private);
-		devm_kfree(&pdev->dev, isp_private);
-		platform_set_drvdata(pdev, NULL);
-		printk("isp_probe: no memory for isp lsc buf alloc, error.\n");
-		return ret;
-	}
-
 	ret = misc_register(&isp_dev);
 	if (ret) {
 		ret = -EACCES;
-		isp_yiq_antiflicker_buf_free(isp_private);
 		isp_block_buf_free(isp_private);
 		devm_kfree(&pdev->dev, isp_private);
 		platform_set_drvdata(pdev, NULL);
@@ -973,6 +907,7 @@ static int isp_probe(struct platform_device *pdev)
 	}
 
 	parse_baseaddress(pdev->dev.of_node);
+	parse_irq(pdev->dev.of_node);
 	printk("isp_probe: success.\n");
 
 	return ret;
@@ -985,7 +920,6 @@ static int isp_remove(struct platform_device *dev)
 	isp_private = platform_get_drvdata(dev);
 
 	if (isp_private) {
-		isp_yiq_antiflicker_buf_free(isp_private);
 		isp_block_buf_free(isp_private);
 		devm_kfree(&dev->dev, isp_private);
 		platform_set_drvdata(dev, NULL);

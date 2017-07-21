@@ -55,7 +55,7 @@ extern   "C"
 
 #define ISP_EB_BIT		BIT_2
 #define ISP_RST_LOG_BIT	BIT_2
-#define ISP_RST_CFG_BIT	BIT_3		
+#define ISP_RST_CFG_BIT	BIT_3
 #define ISP_CORE_CLK_EB_BIT	BIT_4
 #define ISP_AXI_MASTER_STOP_BIT BIT_0
 

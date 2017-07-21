@@ -76,6 +76,7 @@ sprd_isp-objs := isp_drv.o \
 		isp2.0/tshark2/src/isp_k_2d_lsc.o \
 		isp2.0/tshark2/src/isp_k_1d_lsc.o \
 		isp2.0/tshark2/src/isp_k_binning4awb.o \
+		isp2.0/tshark2/src/isp_k_buf_queue.o \
 		isp2.0/tshark2/src/isp_k_awb.o \
 		isp2.0/tshark2/src/isp_k_raw_aem.o \
 		isp2.0/tshark2/src/isp_k_bpc.o \
@@ -140,6 +141,7 @@ sprd_isp-objs := isp_drv.o \
 		isp2.0/pike/src/isp_k_2d_lsc.o \
 		isp2.0/pike/src/isp_k_1d_lsc.o \
 		isp2.0/pike/src/isp_k_binning4awb.o \
+		isp2.0/pike/src/isp_k_buf_queue.o \
 		isp2.0/pike/src/isp_k_awb.o \
 		isp2.0/pike/src/isp_k_raw_aem.o \
 		isp2.0/pike/src/isp_k_bpc.o \

@@ -15,7 +15,7 @@
 #ifndef CONFIG_64BIT
 #include <soc/sprd/hardware.h>
 #endif
-#include "parse_hwinfo_tshark2.h"
+#include "parse_hwinfo.h"
 
 #define ISP_BASE_ADDR                      ISP_BASE//SPRD_ISP_BASE
 

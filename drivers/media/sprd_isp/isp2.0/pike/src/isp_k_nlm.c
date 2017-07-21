@@ -16,6 +16,7 @@
 #include <video/sprd_isp.h>
 #include <linux/vmalloc.h>
 #include "isp_reg.h"
+#include "isp_drv.h"
 
 static int32_t isp_k_vst_block(struct isp_io_param *param)
 {
@@ -30,13 +31,12 @@ static int32_t isp_k_vst_block(struct isp_io_param *param)
 
 	REG_MWR(ISP_VST_PARA, BIT_0, vst_info.bypass);
 
-	REG_MWR(ISP_VST_PARA, BIT_1, vst_info.buf_sel << 1);
-
 	return ret;
 
 }
 
-static int32_t isp_k_nlm_block(struct isp_io_param *param)
+static int32_t isp_k_nlm_block(struct isp_io_param *param,
+	struct isp_k_private *isp_private)
 {
 	int32_t ret = 0;
 	uint32_t val = 0;
@@ -44,7 +44,6 @@ static int32_t isp_k_nlm_block(struct isp_io_param *param)
 	struct isp_dev_nlm_info_v2 nlm_info;
 	uint32_t *buff0 = NULL;
 	uint32_t *buff1 = NULL;
-	unsigned long buf_addr = 0;
 	void *vst_addr = NULL;
 	void *ivst_addr = NULL;
 
@@ -54,43 +53,53 @@ static int32_t isp_k_nlm_block(struct isp_io_param *param)
 		return -1;
 	}
 
-	buff0 = vzalloc(nlm_info.vst_len);
-	if (NULL == buff0) {
-		printk("isp_k_nlm_block:vst kmalloc error\n");
-		return -1;
-	}
+	if (isp_private->is_vst_ivst_update) {
+		isp_private->is_vst_ivst_update = 0;
 
-	buff1 = vzalloc(nlm_info.ivst_len);
-	if (NULL == buff1) {
-		printk("isp_k_nlm_block:ivst kmalloc error\n");
-		vfree(buff0);
-		return -1;
-	}
+		buff0 = vzalloc(nlm_info.vst_len);
+		if (NULL == buff0) {
+			printk("isp_k_nlm_block:vst kmalloc error\n");
+			return -1;
+		}
 
-#ifdef CONFIG_64BIT
-	vst_addr = (void*)(((unsigned long)nlm_info.vst_addr[1] << 32) | nlm_info.vst_addr[0]);
-#else
-	vst_addr = (void*)(nlm_info.vst_addr[0]);
-#endif
-	ret = copy_from_user((void *)buff0, vst_addr, nlm_info.vst_len);
-	if (0 != ret) {
-		printk("isp_k_nlm_block: vst copy error, ret=0x%x\n", (uint32_t)ret);
-		vfree(buff0);
-		vfree(buff1);
-		return -1;
-	}
+		buff1 = vzalloc(nlm_info.ivst_len);
+		if (NULL == buff1) {
+			printk("isp_k_nlm_block:ivst kmalloc error\n");
+			vfree(buff0);
+			return -1;
+		}
 
 #ifdef CONFIG_64BIT
-	ivst_addr = (void*)(((unsigned long)nlm_info.ivst_addr[1] << 32) | nlm_info.ivst_addr[0]);
+		vst_addr = (void*)(((unsigned long)nlm_info.vst_addr[1] << 32) | nlm_info.vst_addr[0]);
 #else
-	ivst_addr = (void*)(nlm_info.ivst_addr[0]);
+		vst_addr = (void*)(nlm_info.vst_addr[0]);
 #endif
-	ret = copy_from_user((void *)buff1, ivst_addr, nlm_info.ivst_len);
-	if (0 != ret) {
-		printk("isp_k_nlm_block: ivst copy error, ret=0x%x\n", (uint32_t)ret);
+		ret = copy_from_user((void *)buff0, vst_addr, nlm_info.vst_len);
+		if (0 != ret) {
+			printk("isp_k_nlm_block: vst copy error, ret=0x%x\n", (uint32_t)ret);
+			vfree(buff0);
+			vfree(buff1);
+			return -1;
+		}
+
+#ifdef CONFIG_64BIT
+		ivst_addr = (void*)(((unsigned long)nlm_info.ivst_addr[1] << 32) | nlm_info.ivst_addr[0]);
+#else
+		ivst_addr = (void*)(nlm_info.ivst_addr[0]);
+#endif
+		ret = copy_from_user((void *)buff1, ivst_addr, nlm_info.ivst_len);
+		if (0 != ret) {
+			printk("isp_k_nlm_block: ivst copy error, ret=0x%x\n", (uint32_t)ret);
+			vfree(buff0);
+			vfree(buff1);
+			return -1;
+		}
+
+		memcpy((void *)ISP_VST_BUF0_CH0, buff0, ISP_VST_IVST_NUM * sizeof(uint32_t));
+		memcpy((void *)ISP_IVST_BUF0_CH0, buff1, ISP_VST_IVST_NUM * sizeof(uint32_t));
+
 		vfree(buff0);
 		vfree(buff1);
-		return -1;
 	}
 
 	REG_MWR(ISP_NLM_PARA, BIT_1, nlm_info.imp_opt_bypass << 1);
@@ -104,7 +113,7 @@ static int32_t isp_k_nlm_block(struct isp_io_param *param)
 
 	REG_MWR(ISP_NLM_STERNGTH, 0x7F, nlm_info.streng_th);
 
-	REG_MWR(ISP_NLM_STERNGTH, 0x7F80, nlm_info.texture_dec << 7);
+	REG_MWR(ISP_NLM_STERNGTH, 0x3F80, nlm_info.texture_dec << 7);
 
 	REG_WR(ISP_NLM_IS_FLAT, nlm_info.is_flat & 0xFF);
 
@@ -117,33 +126,10 @@ static int32_t isp_k_nlm_block(struct isp_io_param *param)
 		REG_WR(ISP_NLM_LUT_W_0 + i * 4, val);
 	}
 
-
-	if (nlm_info.buf_sel ) {
-		//buf_addr = ISP_VST_BUF1_CH0;
-		//memcpy((void *)buf_addr, buff0, ISP_VST_IVST_NUM * sizeof(uint32_t));
-	} else {
-		buf_addr = ISP_VST_BUF0_CH0;
-		memcpy((void *)buf_addr, buff0, ISP_VST_IVST_NUM * sizeof(uint32_t));
-	}
-
-	if (nlm_info.buf_sel ) {
-		//buf_addr = ISP_IVST_BUF1_CH0;
-		//memcpy((void *)buf_addr, buff1, ISP_VST_IVST_NUM * sizeof(uint32_t));
-	} else {
-		buf_addr = ISP_IVST_BUF0_CH0;
-		memcpy((void *)buf_addr, buff1, ISP_VST_IVST_NUM * sizeof(uint32_t));
-	}
-
-	/*vst ivst follow nlm*/
-	REG_MWR(ISP_VST_PARA, BIT_1, nlm_info.buf_sel << 1);
-	REG_MWR(ISP_IVST_PARA, BIT_1, nlm_info.buf_sel << 1);
-
 	REG_MWR(ISP_NLM_PARA, BIT_0, nlm_info.bypass);
 	REG_MWR(ISP_IVST_PARA, BIT_0, nlm_info.bypass);
 	REG_MWR(ISP_VST_PARA, BIT_0, nlm_info.bypass);
 
-	vfree(buff0);
-	vfree(buff1);
 	return ret;
 
 }
@@ -162,13 +148,11 @@ static int32_t isp_k_ivst_block(struct isp_io_param *param)
 
 	REG_MWR(ISP_IVST_PARA, BIT_0, ivst_info.bypass);
 
-	REG_MWR(ISP_IVST_PARA, BIT_1, ivst_info.buf_sel << 1);
-
 	return ret;
-
 }
 
-int32_t isp_k_cfg_nlm(struct isp_io_param *param)
+int32_t isp_k_cfg_nlm(struct isp_io_param *param,
+	struct isp_k_private *isp_private)
 {
 	int32_t ret = 0;
 
@@ -187,7 +171,7 @@ int32_t isp_k_cfg_nlm(struct isp_io_param *param)
 		ret = isp_k_vst_block(param);
 		break;
 	case ISP_PRO_NLM_BLOCK:
-		ret = isp_k_nlm_block(param);
+		ret = isp_k_nlm_block(param, isp_private);
 		break;
 	case ISP_PRO_IVST_BLOCK:
 		ret = isp_k_ivst_block(param);

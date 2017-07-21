@@ -168,11 +168,11 @@ long compat_isp_kernel_ioctl( struct file *fl, unsigned int cmd, unsigned long p
 			struct compat_isp_reg_param __user *data32;
 			struct isp_reg_param __user *data;
 			uint32_t cnt;
-			
-		
+
+
 			data32 = compat_ptr(param);
 			err = get_user(cnt, &data32->counts);
-			
+
 //			printk("COMPAT_ISP_IO_WRITE param: %p \n", data32);
 			data = compat_alloc_user_space(sizeof(struct isp_reg_param)+cnt*sizeof(struct isp_reg_bits));
 			if (data == NULL) {
@@ -199,11 +199,11 @@ long compat_isp_kernel_ioctl( struct file *fl, unsigned int cmd, unsigned long p
 			struct compat_isp_reg_param __user *data32;
 			struct isp_reg_param __user *data;
 			uint32_t cnt;
-			
+
 
 			data32 = compat_ptr(param);
 			err = get_user(cnt, &data32->counts);
-			
+
 //			printk("COMPAT_ISP_IO_WRITE param: %p \n", data32);
 			data = compat_alloc_user_space(sizeof(struct isp_reg_param)+cnt*sizeof(struct isp_reg_bits));
 			if (data == NULL) {
@@ -228,7 +228,7 @@ long compat_isp_kernel_ioctl( struct file *fl, unsigned int cmd, unsigned long p
 			struct compat_isp_reg_param __user *data32;
 			struct isp_reg_param __user *data;
 			char __user  *lnc_data;
-			
+
 
 			data32 = compat_ptr(param);
 			data = compat_alloc_user_space(sizeof(*data));
@@ -257,11 +257,11 @@ long compat_isp_kernel_ioctl( struct file *fl, unsigned int cmd, unsigned long p
 			struct compat_isp_reg_param __user *data32;
 			struct isp_reg_param __user *data;
 			uint32_t cnt;
-			
-		
+
+
 			data32 = compat_ptr(param);
 			err = get_user(cnt, &data32->counts);
-			
+
 //			printk("COMPAT_ISP_IO_WRITE param: %p \n", data32);
 			data = compat_alloc_user_space(sizeof(struct isp_reg_param)+cnt*sizeof(struct isp_reg_bits));
 			if (data == NULL) {

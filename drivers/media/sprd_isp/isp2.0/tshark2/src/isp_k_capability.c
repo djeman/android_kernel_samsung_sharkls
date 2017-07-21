@@ -14,9 +14,10 @@
 #include <linux/uaccess.h>
 #include <linux/sprd_mm.h>
 #include <video/sprd_isp.h>
+#include <soc/sprd/arch_misc.h>
 #include "isp_reg.h"
 
-#if defined(CONFIG_ARCH_SCX35LT8)
+#if defined(CONFIG_ARCH_SCX35LT8) || defined(CONFIG_ARCH_WHALE)
 #define ISP_MAX_WIDTH             4416
 #define ISP_MAX_HEIGHT            3168
 #define ISP_MAX_SLICE_WIDTH       4416
@@ -36,11 +37,11 @@ static int32_t isp_k_capability_chip_id(struct isp_capability *param)
 	int32_t ret = 0;
 	uint32_t chip_id = 0;
 
-#if defined(CONFIG_ARCH_SCX30G3)
-	chip_id = ISP_CHIP_ID_TSHARK3;
-#else
-	chip_id = ISP_CHIP_ID_TSHARK2;
-#endif
+	if (soc_is_scx9832a_v0() || soc_is_scx30g3_v0()) {
+		chip_id = ISP_CHIP_ID_TSHARK3;
+	} else {
+		chip_id = ISP_CHIP_ID_TSHARK2;
+	}
 
 	ret = copy_to_user(param->property_param, (void*)&chip_id, sizeof(chip_id));
 	if (0 != ret) {

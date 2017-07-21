@@ -84,6 +84,13 @@ static int32_t isp_k_fetch_start_isp(struct isp_io_param *param)
 		return -1;
 	}
 
+#if defined(CONFIG_ARCH_WHALE)
+	REG_OWR(ISP_RAW_SIZER_PARAM, 0x07);
+
+	REG_MWR(ISP_COMMON_CTRL_CH0, 3<<16, 0<<16);
+	REG_MWR(ISP_COMMON_CTRL_CH0, 3, 0);
+#endif
+
 	if (fetch_start) {
 		REG_OWR(ISP_FETCH_START, BIT_0);
 	} else {

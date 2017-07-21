@@ -38,7 +38,7 @@ static struct isp_cfg_fun isp_cfg_fun_tab[] = {
 	{ISP_BLOCK_BDN,               isp_k_cfg_bdn},
 	{ISP_BLOCK_GRGB,                   isp_k_cfg_grgb},
 	{ISP_BLOCK_RGB_GAIN2,              isp_k_cfg_rgb_gain2},
-	{ISP_BLOCK_NLM,                    isp_k_cfg_nlm},
+	/*{ISP_BLOCK_NLM,                    isp_k_cfg_nlm},*/
 	{ISP_BLOCK_CFA,                 isp_k_cfg_cfa},
 	{ISP_BLOCK_CMC,                    isp_k_cfg_cmc10},
 	{ISP_BLOCK_HDR,                    isp_k_cfg_hdr},//pike add module,this module is same to sharkl's hdr module
@@ -114,8 +114,12 @@ int32_t isp_cfg_param(void  *param, struct isp_k_private *isp_private)
 		ret = isp_k_cfg_ygamma(&isp_param, isp_private);
 	} else if (ISP_BLOCK_AWB == isp_param.sub_block) {
 		ret = isp_k_cfg_awb(&isp_param, isp_private);
-	} else if(ISP_BLOCK_BINNING4AWB == isp_param.sub_block){
+	} else if (ISP_BLOCK_BINNING4AWB == isp_param.sub_block) {
 		ret = isp_k_cfg_binning(&isp_param, isp_private);
+	} else if (ISP_BLOCK_BUFQUEUE == isp_param.sub_block) {
+		ret = isp_k_cfg_buf_queue(&isp_param, isp_private);
+	} else if (ISP_BLOCK_NLM == isp_param.sub_block) {
+		ret = isp_k_cfg_nlm(&isp_param, isp_private);
 	} else {
 		cnt = sizeof(isp_cfg_fun_tab) / sizeof(isp_cfg_fun_tab[0]);
 		for (i = 0; i < cnt; i++) {

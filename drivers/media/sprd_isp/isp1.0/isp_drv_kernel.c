@@ -127,7 +127,7 @@ struct isp_device_t
 	uint32_t buf_len;
 	struct isp_queue queue;
 	struct semaphore sem_isr;/*for interrupts*/
-	struct semaphore sem_isp;/*for the isp device, protect the isp hardware; protect  only  one caller use the oi*/ 
+	struct semaphore sem_isp;/*for the isp device, protect the isp hardware; protect  only  one caller use the oi*/
 				/*controll/read/write functions*/
 	struct clk* s_isp_clk_mm_i;
 	struct clk              *s_isp_clk;
@@ -425,7 +425,6 @@ static int32_t _isp_lnc_param_load_ex(struct isp_reg_bits *reg_bits_ptr, uint32_
 		#endif
 
 		reg_bits_ptr->reg_value=(uint32_t)__pa(reg_bits_ptr->reg_value);
-//#if defined(CONFIG_MACH_CORE3)
 
 
 			reg_value=ISP_READL(ISP_LNC_STATUS);
@@ -493,7 +492,7 @@ static int32_t _isp_lnc_param_load(struct isp_reg_bits *reg_bits_ptr, uint32_t c
 		ISP_PRINT("isp_k: isp load lnc param error\n");
 	}
 
-	return ret;
+	return 0;
 }
 
 static int32_t _isp_lnc_param_set(uint32_t* addr, uint32_t len)
@@ -566,7 +565,7 @@ static int32_t _isp_set_clk(enum isp_clk_sel clk_sel)
 	ISP_CHECK_ZERO(g_isp_dev_ptr);
 
 #ifdef CONFIG_SC_FPGA
-	return 0; 
+	return 0;
 #endif
 
 	switch (clk_sel) {
@@ -956,11 +955,8 @@ void _dcam_isp_root(void)
 	if(0x00 !=s_dcam_int_eb)
 	{
 		spin_lock_irqsave(&isp_spin_lock,flag);
-		#if defined(CONFIG_MACH_CORE3)
-		node.dcam_irq_val = ISP_INT_FETCH_EOF;
-		#else
+
 		node.dcam_irq_val = ISP_INT_FETCH_SOF;
-		#endif
 
 		//ISP_PRINT("isp_k: dcam sof irq :0x%x\n", node.dcam_irq_val);
 		_isp_get_systemtime(&system_time);

@@ -27,7 +27,7 @@ int32_t isp_k_cfg_bpc(struct isp_io_param *param);
 int32_t isp_k_cfg_bdn(struct isp_io_param *param);
 int32_t isp_k_cfg_grgb(struct isp_io_param *param);
 int32_t isp_k_cfg_rgb_gain2(struct isp_io_param *param);
-int32_t isp_k_cfg_nlm(struct isp_io_param *param);
+int32_t isp_k_cfg_nlm(struct isp_io_param *param, struct isp_k_private *isp_private);
 int32_t isp_k_cfg_cfa(struct isp_io_param *param);
 int32_t isp_k_cfg_cmc10(struct isp_io_param *param);
 int32_t isp_k_cfg_hdr(struct isp_io_param *param);
@@ -64,6 +64,7 @@ int32_t isp_k_cfg_fetch(struct isp_io_param *param);
 int32_t isp_k_cfg_store(struct isp_io_param *param);
 int32_t isp_k_cfg_dispatch(struct isp_io_param *param);
 int32_t isp_k_cfg_arbiter(struct isp_io_param *param);
+int32_t isp_k_cfg_buf_queue(struct isp_io_param *param, struct isp_k_private *isp_private);
 int32_t isp_k_cfg_common(struct isp_io_param *param);
 int32_t isp_k_cfg_raw_sizer(struct isp_io_param *param);
 //pike add

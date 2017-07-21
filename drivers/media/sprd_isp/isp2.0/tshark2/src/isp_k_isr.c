@@ -15,6 +15,7 @@
 #include <linux/sprd_mm.h>
 #include <video/sprd_isp.h>
 #include <linux/delay.h>
+#include <soc/sprd/arch_misc.h>
 #include "isp_reg.h"
 #include "isp_drv.h"
 
@@ -56,15 +57,16 @@ void isp_en_irq(uint32_t irq_mode)
 
 	switch(irq_mode) {
 	case ISP_INT_VIDEO_MODE:
-#if defined(CONFIG_ARCH_SCX30G3)
-		REG_WR(ISP_INT_EN0, ISP_INT_DCAMERA_SOF | ISP_INT_AEM_DONE | ISP_INT_AFM_RGB_DONE | ISP_INT_AFM_Y_DONE | ISP_INT_AEM2_DONE);
-		REG_WR(ISP_INT_EN1, 0);
-		REG_WR(ISP_INT_EN2, ISP_INT_AFL_NEW_DDR_DONE);
-#else
-		REG_WR(ISP_INT_EN0, ISP_INT_DCAMERA_SOF | ISP_INT_AEM_DONE | ISP_INT_AFM_RGB_DONE | ISP_INT_AFM_Y_DONE | ISP_INT_AEM2_DONE | ISP_INT_AFL_DONE);
-		REG_WR(ISP_INT_EN1, 0);
-		REG_WR(ISP_INT_EN2, 0);
-#endif
+		if (soc_is_scx9832a_v0() || soc_is_scx30g3_v0()) {
+			REG_WR(ISP_INT_EN0, ISP_INT_DCAMERA_SOF | ISP_INT_AEM_DONE | ISP_INT_AFM_RGB_DONE | ISP_INT_AFM_Y_DONE | ISP_INT_AEM2_DONE);
+			REG_WR(ISP_INT_EN1, 0);
+			REG_WR(ISP_INT_EN2, ISP_INT_AFL_NEW_DDR_DONE);
+		} else {
+			REG_WR(ISP_INT_EN0, ISP_INT_DCAMERA_SOF | ISP_INT_AEM_DONE | ISP_INT_AFM_RGB_DONE | ISP_INT_AFM_Y_DONE | ISP_INT_AFL_DONE | ISP_INT_AEM2_DONE \
+				| ISP_INT_BINNING_DONE);
+			REG_WR(ISP_INT_EN1, 0);
+			REG_WR(ISP_INT_EN2, 0);
+		}
 		break;
 	case ISP_INT_CAPTURE_MODE:
 		REG_WR(ISP_INT_EN0, ISP_INT_STORE_DONE);

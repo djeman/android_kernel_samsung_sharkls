@@ -70,6 +70,7 @@ enum isp_interrupt_mode {
 
  enum isp_clk_sel {
  	ISP_CLK_480M = 0,
+	ISP_CLK_468M,
 	ISP_CLK_384M,
 	ISP_CLK_312M,
 	ISP_CLK_256M,
@@ -540,6 +541,7 @@ enum isp_block {
 	ISP_BLOCK_ARBITER_V1,
 	ISP_BLOCK_COMMON_V1,
 	ISP_BLOCK_RAW_SIZER,
+	ISP_BLOCK_BUFQUEUE,
 /***************pike**************************************/
 //	ISP_BLOCK_WDR,
 	ISP_BLOCK_RGB2Y,
@@ -787,6 +789,7 @@ enum isp_binging4awb_property {
 	ISP_PRO_BINNING4AWB_STATISTICS_BUF,
 	ISP_PRO_BINNING4AWB_TRANSADDR,
 	ISP_PRO_BINNING4AWB_ENDIAN,
+	ISP_PRO_BINNING4AWB_INITBUF,
 };
 
 enum isp_pre_glb_gain_property {
@@ -1101,6 +1104,18 @@ struct isp_scaling_ratio {
 struct isp_b4awb_phys {
 	uint32_t phys0;
 	uint32_t phys1;
+};
+
+enum isp_buf_node_type {
+	ISP_NODE_TYPE_BINNING4AWB,
+	ISP_NODE_TYPE_RAWAEM,
+	ISP_NODE_TYPE_AE_RESERVED,
+};
+
+struct isp_buf_node {
+	uint32_t    type;
+	uint64_t    k_addr;
+	uint64_t    u_addr;
 };
 
 struct isp_hdr_rgb_index {
@@ -1572,6 +1587,12 @@ enum isp_common_property_v1 {
 	ISP_PRO_COMMON_3A_SINGLE_FRAME_CTRL,
 };
 
+enum isp_bufqueue_property {
+	ISP_PRO_BUFQUEUE_INIT,
+	ISP_PRO_BUFQUEUE_ENQUEUE_BUF,
+	ISP_PRO_BUFQUEUE_DEQUEUE_BUF,
+};
+
 enum isp_pwd_property {
 	ISP_PRO_PWD_BLOCK,
 	ISP_PRO_PWD_SLICE_SIZE,
@@ -1662,6 +1683,7 @@ enum isp_anti_flicker_property {
 	ISP_PRO_ANTI_FLICKER_BLOCK,
 	ISP_PRO_ANTI_FLICKER_STATISTIC,
 	ISP_PRO_ANTI_FLICKER_BYPASS,
+	ISP_PRO_ANTI_FLICKER_TRANSADDR,
 };
 
 enum isp_yiq_afm_property {
