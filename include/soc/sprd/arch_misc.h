@@ -26,6 +26,9 @@
 #define SCX30G2_ALPHA_TAPOUT            (0x8730C000)
 #define SCX30G2_ALPHA_TAPOUT_MASK       (0xFFFFF000)
 
+#define SCX30G3_ALPHA_TAPOUT		(0x8730D000)
+#define SCX30G3_ALPHA_TAPOUT_MASK	(0xFFFFF000)
+
 #define SCX9630_ALPHA_TAPOUT            (0x96300000)
 #define SCX9630_ALPHA_TAPOUT_MASK       (0xFFFFF000)
 
@@ -40,6 +43,9 @@
 
 #define SCX9830I_ALPHA_TAPOUT            (0x6b4c5300)
 #define SCX9830I_ALPHA_TAPOUT_MASK       (0xFFFFFFFF)
+
+#define SCX9832A_ALPHA_TAPOUT            (0x96301000)
+#define SCX9832A_ALPHA_TAPOUT_MASK       (0xFFFFF000)
 
 /**
  * sci_get_chip_id - read chip id
@@ -67,6 +73,7 @@ enum sci_ana_chip_ver {
 	/* SC2723 */
 	SC2723ES = 0x090,
 	SC2723TS = 0x0C0,
+	SC2723MBB = 0x0C1,
 	//TODO: Add more ana chip version here
 };
 
@@ -100,7 +107,7 @@ void set_section_ro(unsigned long virt, unsigned long numsections);
 #define IS_CPU(name, id, mask)		\
 static inline int soc_id_is_##name(void)	\
 {						\
-	/* pr_info("chip id is %x\n",sci_get_chip_id());  */     \
+	pr_info("chip id is %x\n",sci_get_chip_id());     \
 	return ((sci_get_chip_id() & mask) == (id & mask));	\
 }
 
@@ -108,24 +115,26 @@ IS_CPU(sc8735v0, SCX35_ALPHA_TAPOUT, SCX35_ALPHA_TAPOUT_MASK)
 IS_CPU(sc8735v1, SCX35_BETA_TAPOUT, SCX35_BETA_TAPOUT_MASK)
 IS_CPU(sc8735gv0, SCX35G_ALPHA_TAPOUT, SCX35G_ALPHA_TAPOUT_MASK)
 IS_CPU(sc8730g2v0, SCX30G2_ALPHA_TAPOUT, SCX30G2_ALPHA_TAPOUT_MASK)
+IS_CPU(sc8730g3v0, SCX30G3_ALPHA_TAPOUT, SCX30G3_ALPHA_TAPOUT_MASK)
 IS_CPU(sc9631v0, SCX35L64_ALPHA_TAPOUT, SCX35L64_ALPHA_TAPOUT_MASK)
 IS_CPU(sc9630v0, SCX9630_ALPHA_TAPOUT, SCX9630_ALPHA_TAPOUT_MASK)
 IS_CPU(sc9820v0, SCX9820_ALPHA_TAPOUT, SCX9820_ALPHA_TAPOUT_MASK)
 IS_CPU(sc7720v0, SCX7720_ALPHA_TAPOUT, SCX7720_ALPHA_TAPOUT_MASK)
 IS_CPU(sc9830iv0, SCX9830I_ALPHA_TAPOUT, SCX9830I_ALPHA_TAPOUT_MASK)
-
+IS_CPU(sc9832av0, SCX9832A_ALPHA_TAPOUT, SCX9832A_ALPHA_TAPOUT_MASK)
 
 /*Driver can use this MACRO to distinguish different chip code */
 #define soc_is_scx35_v0()	soc_id_is_sc8735v0()
 #define soc_is_scx35_v1()	soc_id_is_sc8735v1()
 #define soc_is_scx35g_v0()     soc_id_is_sc8735gv0()
 #define soc_is_scx30g2_v0()     soc_id_is_sc8730g2v0()
+#define soc_is_scx30g3_v0()     soc_id_is_sc8730g3v0()
 #define soc_is_scx35l64_v0()     soc_id_is_sc9631v0()
 #define soc_is_scx9630_v0()     soc_id_is_sc9630v0()
 #define soc_is_scx9820_v0()     soc_id_is_sc9820v0()
 #define soc_is_scx7720_v0()     soc_id_is_sc7720v0()
 #define soc_is_scx9830i_v0()     soc_id_is_sc9830iv0()
-
+#define soc_is_scx9832a_v0()	soc_id_is_sc9832av0()
 
 /**
 * read value from virtual address. Pls make sure val is not NULL.
