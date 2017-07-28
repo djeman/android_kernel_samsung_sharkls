@@ -821,8 +821,8 @@
 		sprd,dst = <5>;
 		sprd,channel = <4>;
 		sprd,ringnr = <11>;
-		sprd,size-rxbuf = <0x1000>; /* 4*1024 */
-		sprd,size-txbuf = <0x1000>; /* 4*1024 */
+		sprd,size-rxbuf = <0x3000>; /* 4*1024 */
+		sprd,size-txbuf = <0x3000>; /* 4*1024 */
 	};
 
 	slog_lte {
