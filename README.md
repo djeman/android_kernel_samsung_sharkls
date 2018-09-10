@@ -1,1 +1,1 @@
-# SM-J320FN Kernel
+# scx35l/sharkls Kernel
