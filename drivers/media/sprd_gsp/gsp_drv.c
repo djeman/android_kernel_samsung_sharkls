@@ -663,6 +663,9 @@ static GSP_CAPABILITY_T* GSP_Config_Capability(void)
 		#else
 			s_gsp_capability.buf_type_support=GSP_Get_Addr_Type();
 		#endif
+		#ifdef CONFIG_GSP_THREE_OVERLAY
+			s_gsp_capability.max_layer_cnt = 3;
+		#endif
         s_gsp_capability.yuv_xywh_even = 1;
         s_gsp_capability.crop_min.w=s_gsp_capability.crop_min.h=4;
         s_gsp_capability.out_min.w=s_gsp_capability.out_min.h=4;
