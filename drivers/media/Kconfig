@@ -210,3 +210,7 @@ source "drivers/media/tuners/Kconfig"
 source "drivers/media/dvb-frontends/Kconfig"
 
 endif # MEDIA_SUPPORT
+
+#spreadtrum's FM radio based on SR2331 chip
+source "drivers/media/radio/sprd2331/Kconfig"
+
