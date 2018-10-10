@@ -114,6 +114,7 @@ struct sdio_data {
 #define MARLIN_DEVICE_ID  0x2331
 #define SDIO_CHN_8  0x1 
 #define SDIO_CHN_9	0x2
+#define SDIO_CHN_10	0x4
 #define SDIO_CHN_11	0x8
 #define SDIO_CHN_12	0x10
 #define SDIO_CHN_13	0x20
@@ -122,7 +123,10 @@ struct sdio_data {
 #define SDIO_CHN_15	0x80
 
 #define SDIOLOG_CHN  14
+/*
 #define SDIO_SYNC_CHN 10
+*/
+#define FM_CHANNEL_READ	10
 #define DOWNLOAD_CHANNEL_READ	12
 #define PSEUDO_ATC_CHANNEL_READ	11
 #define PSEUDO_ATC_CHANNEL_LOOPCHECK         (15)
