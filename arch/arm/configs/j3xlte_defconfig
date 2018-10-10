@@ -2089,6 +2089,11 @@ CONFIG_MEDIA_SUBDRV_AUTOSELECT=y
 # CONFIG_DVB_DUMMY_FE is not set
 
 #
+# SPREADTRUM SC2331 FM driver
+#
+CONFIG_RADIO_SPRD2331=y
+
+#
 # Graphics support
 #
 # CONFIG_DRM is not set
