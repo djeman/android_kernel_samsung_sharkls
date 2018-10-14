@@ -79,7 +79,7 @@ enum {
 /* change 8 bits to 16bits */
 #define bytes_to_short(dest, src)  (dest = (unsigned short)(((unsigned short)\
 	(*(src)) << 8) + (unsigned short)(*((src) + 1))))
-int rds_parser(unsigned char *, unsigned char);
+void rds_parser(unsigned char *buffer1);
 extern struct fmdrv_ops *fmdev;
 
 #define FMR_ASSERT(a) { \

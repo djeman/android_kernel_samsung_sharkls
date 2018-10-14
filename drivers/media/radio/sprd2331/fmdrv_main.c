@@ -61,37 +61,9 @@
 #define FM_WRITE_SIZE	(64)
 #define FM_READ_SIZE	(128)
 
-
 bool read_flag;
 
 struct fmdrv_ops *fmdev;
-static struct fm_rds_data *g_rds_data_string;
-
-/*
-
-static int fm_read_rds_data(struct file *filp, char __user *buf,
-		size_t count, loff_t *pos)
-{
-	rdsdata_struct rds_data;
-	int len = 0;
-	sprintf(rds_data.ps_data.PS[3], "haha");
-	sprintf(rds_data.rt_data.TextData[3], "george debuging");
-	rds_data.rt_data.TextLength = strlen(rds_data.rt_data.TextData[3]);
-	fm_pr("***** %s *****\n", rds_data.rt_data.TextData[3]);
-	rds_data.pty = 1;
-	rds_data.event_status = 0xff;
-	if (copy_to_user(buf, &rds_data, sizeof(rdsdata_struct)));
-	if (read_flag == 1) {
-		read_flag = 0;
-		fm_pr("* rrds fmdev->read_buf: %s *\n", fmdev->read_buf);
-	}
-	len = sizeof(rdsdata_struct);
-	return len;
-}
-*/
-
-
-
 
 static void receive_tasklet(unsigned long arg)
 {
@@ -101,10 +73,8 @@ static void receive_tasklet(unsigned long arg)
 
 	if (*pdata == '1') {
 		pdata = pdata + 2;
-		rds_parser(pdata, 12);
-		/*wake_up_interruptible(&fmdev->rds_han.rx_queue);*/
-		}
-
+		rds_parser(pdata);
+	}
 	/* seek event before: status,RSSI,SNR,Freq */
 	/* seek event after: 4,status,RSSI,SNR,Freq */
 	else if ((*pdata == '4') ||
@@ -116,30 +86,13 @@ static void receive_tasklet(unsigned long arg)
 		complete(&fmdev->seektask_completion);
 		fm_pr("RX after seektask_completion=0x%x",
 			fmdev->seektask_completion.done);
-	}
-
-	else {
+	} else {
 		fm_pr("receive_tasklet before completion=0x%x",
 			fmdev->completed.done);
 		complete(&fmdev->completed);
 		fm_pr("receive_tasklet after completion=0x%x",
 			fmdev->completed.done);
 	}
-
-}
-
-/*
-* read cmd :at+fm=0
-* RDS data  event:status
-*
-*/
-
-void fm_marlin2_rds_read(unsigned char *buffer, unsigned char len)
-
-{
-	rds_parser(buffer, len);
-
-
 }
 
 /* ssize_t */
@@ -172,7 +125,7 @@ int fm_read_rds_data(struct file *filp, char __user *buf,
 	if (copy_to_user(buf, &(fmdev->rds_data), sizeof(fmdev->rds_data))) {
 		fm_pr("fm_read_rds_data ret value is -eFAULT\n");
 		return -EFAULT;
-		}
+	}
 	pr_info("(fm drs) fm event is %x\n", fmdev->rds_data.event_status);
 	fmdev->rds_data.event_status = 0;
 
@@ -180,7 +133,6 @@ int fm_read_rds_data(struct file *filp, char __user *buf,
 	fm_pr("PS=%s", fmdev->rds_data.ps_data.PS[3]);
 	fm_pr("fm_read_rds_data start");
 	return sizeof(fmdev->rds_data);
-
 }
 
 int parse_at_fm_cmd(uint32 *freq_found)
@@ -259,14 +211,6 @@ int fm_open(struct inode *inode, struct file *filep)
 	return 0;
 }
 
-/*
-static int fm_read_rds_data(struct file *filp,char __user *buf,
-size_t count,loff_t *pos)
-{
-	return 0;
-}
-*/
-
 void fm_sdio_read(void)
 {
 	memset(fmdev->read_buf, 0, FM_READ_SIZE);
@@ -293,11 +237,7 @@ int fm_sdio_write(char *buffer, uint32 size)
 void fm_read(void)
 {
 	fm_sdio_read();
-	tasklet_schedule(&fmdev->rx_task); /* should add here*/
-	/*
-	read_flag = 1;
-	complete(&fmdev->completed);
-	*/
+	tasklet_schedule(&fmdev->rx_task);
 	return;
 }
 EXPORT_SYMBOL_GPL(fm_read);
@@ -351,7 +291,6 @@ int fm_write(unsigned char *array)
 * open event:status
 *
 */
-
 int fm_powerup(void *arg)
 {
 	struct fm_tune_parm parm;
@@ -374,7 +313,6 @@ int fm_powerup(void *arg)
 * close event:status
 *
 */
-
 int fm_powerdown(void)
 {
 	int ret = 0;
@@ -388,9 +326,9 @@ int fm_powerdown(void)
 * tune event:status,RSSI,SNR,Freq
 *
 */
-
 int fm_tune(void *arg)
-{   struct fm_tune_parm parm;
+{
+	struct fm_tune_parm parm;
 	int ret = 0;
 	if (copy_from_user(&parm, arg, sizeof(parm))) {
 		fm_pr("fm tune 's ret value is -eFAULT\n");
@@ -481,13 +419,6 @@ int fm_mute(void *arg)
 	return 0;
 }
 
-struct fm_rds_data *get_rds_data()
-{
-	fm_pr("fm get rds data\n");
-	return g_rds_data_string;
-
-}
-
 int fm_rds_onoff(void *arg)
 {
 	unsigned short is_on;
@@ -495,18 +426,10 @@ int fm_rds_onoff(void *arg)
 	if (copy_from_user(&is_on, arg, sizeof(is_on))) {
 		fm_pr("fm rds_onoff 's ret value is -eFAULT\n");
 		return -EFAULT;
-		}
+	}
 	sprintf(fmdev->write_buf, "at+fm=6,%d\r\n", is_on);
 	ret = fm_write(fmdev->write_buf);
 	return ret;
-}
-
-void set_rds_drv_data(struct fm_rds_data *fm_rds_info)
-{
-	/*memcpy(g_rds_data_string, fm_rds_info, sizeof(struct fm_rds_data)); */
-	g_rds_data_string = fm_rds_info;
-
-
 }
 
 void fm_rds_init(void)
@@ -516,33 +439,24 @@ void fm_rds_init(void)
 
 int __init init_fm_driver(void)
 {
-	int ret;
-	int retval = 0;
-	struct fm_rds_data *fm_rds_info;
+	int ret = 0;
 
 	fmdev = kzalloc(sizeof(struct fmdrv_ops), GFP_KERNEL);
 	if (!fmdev)
-		return;
+		return -ENOMEM;
 	init_completion(&fmdev->completed);
 	init_completion(&fmdev->seektask_completion);
 
 	fmdev->read_buf =  kzalloc(FM_READ_SIZE, GFP_KERNEL);
-/*malloc mem for rds struct */
-	fm_rds_info = kzalloc(sizeof(struct fm_rds_data), GFP_KERNEL);
-	if (NULL == fm_rds_info) {
-		fm_err("fm can't allocate FM RDS buffer\n");
-		return ret;
-		}
-	set_rds_drv_data(fm_rds_info);
-	retval = sdiodev_readchn_init(FM_CHANNEL_READ, fm_read, 0);
+	sdiodev_readchn_init(FM_CHANNEL_READ, fm_read, 0);
 
 	ret = fm_device_init_driver();
 
 	tasklet_init(&fmdev->rx_task, receive_tasklet, (unsigned long)fmdev);
+
 	/* RDS init*/
 	fm_rds_init();
 	init_waitqueue_head(&fmdev->rds_han.rx_queue);
-/* tasklet_schedule(&fmdev->rx_task);/* not here,should called in callback*/
 
 	return ret;
 }

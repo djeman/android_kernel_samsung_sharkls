@@ -164,7 +164,7 @@ long fm_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			fm_pr("fm RDS support 's ret value is -eFAULT\n");
 			return -EFAULT;
 		}
-		iarg = 0;
+		iarg = 1;
 		if (copy_to_user(arg, &iarg, sizeof(iarg)))
 			ret = -EFAULT;
 		break;
