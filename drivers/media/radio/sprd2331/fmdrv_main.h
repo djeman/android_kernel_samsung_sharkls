@@ -32,5 +32,4 @@ int fm_getrssi(void *);
 int fm_mute(void *);
 int fm_rds_onoff(void *);
 int fm_read_rds_data(struct file *, char *, size_t , loff_t *);
-struct fm_rds_data *get_rds_data();
 #endif
