@@ -22,6 +22,8 @@
 #ifndef _FMDRV_RDS_PARSER
 #define _FMDRV_RDS_PARSER
 
+#define CRC_OK 			0x01
+
 #define RDS_BLCKA		0x00	/* Block1 */
 #define RDS_BLCKB		0x10	/* Block2 */
 #define RDS_BLCKC		0x20	/* Block3 */
@@ -31,14 +33,12 @@
 #define RDS_BLCKE		0x60	/* Block E  */
 
 /* 3bytes = 8bit(CRC flag) + 16bits (1 block ) */
-#define rds_data_unit_size  3
-#define rds_data_group_size  (3*4)
-#define grp_type_mask     0xF0
-#define grp_ver_mask       0x0F
-#define grp_ver_bit          (0x01<<3) /* 0:version A, 1: version B */
-#define grp_ver_a           0x0A
-#define grp_ver_b            0x0B
-#define invalid_grp_type    0x00
+#define GRP_TYPE_MASK       0xF0
+#define GRP_VER_MASK        0x0F
+#define GRP_VER_BIT         (1 << 3) /* 0:version A, 1: version B */
+#define GRP_VER_A           0x0A
+#define GRP_VER_B           0x0B
+#define GRP_TYPE_INVALID    0x00
 
 #define RDS_AF_FILL         205    /* AF fill in code */
 #define RDS_AF_INVAL_L      205    /* AF invalid code low marker */
@@ -75,11 +75,23 @@ enum {
 	RDS_AF_M_B  /* method - B */
 };
 
+typedef struct {
+	unsigned char crc_flag;
+	union {
+		unsigned char data[2];
+		unsigned short word;
+	}
+} RDS_marlin_block;
+
+typedef struct {
+	unsigned char grp_type;
+	RDS_marlin_block block[4];
+} RDS_marlin_group;
 
 /* change 8 bits to 16bits */
 #define bytes_to_short(dest, src)  (dest = (unsigned short)(((unsigned short)\
 	(*(src)) << 8) + (unsigned short)(*((src) + 1))))
-void rds_parser(unsigned char *buffer1);
+void rds_parser(unsigned char *buffer);
 extern struct fmdrv_ops *fmdev;
 
 #define FMR_ASSERT(a) { \

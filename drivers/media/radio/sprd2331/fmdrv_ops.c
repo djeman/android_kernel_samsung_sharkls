@@ -326,8 +326,6 @@ int fm_release(struct inode *inode, struct file *filep)
 	wake_up_interruptible(&fmdev->rds_han.rx_queue);
 	fmdev->rds_han.new_data_flag = 1;
 
-	/*fm_deinit();*/
-
 	return 0;
 }
 
