@@ -126,12 +126,9 @@ int fm_read_rds_data(struct file *filp, char __user *buf,
 		fm_pr("fm_read_rds_data ret value is -eFAULT\n");
 		return -EFAULT;
 	}
+
 	pr_info("(fm drs) fm event is %x\n", fmdev->rds_data.event_status);
 	fmdev->rds_data.event_status = 0;
-
-	fm_pr("fmevent_status=%x", fmdev->rds_data.event_status);
-	fm_pr("PS=%s", fmdev->rds_data.ps_data.PS[3]);
-	fm_pr("fm_read_rds_data start");
 	return sizeof(fmdev->rds_data);
 }
 
@@ -432,11 +429,6 @@ int fm_rds_onoff(void *arg)
 	return ret;
 }
 
-void fm_rds_init(void)
-{
-	fmdev->rds_han.new_data_flag = 0;
-}
-
 int __init init_fm_driver(void)
 {
 	int ret = 0;
@@ -455,7 +447,7 @@ int __init init_fm_driver(void)
 	tasklet_init(&fmdev->rx_task, receive_tasklet, (unsigned long)fmdev);
 
 	/* RDS init*/
-	fm_rds_init();
+	fmdev->rds_han.new_data_flag = 0;
 	init_waitqueue_head(&fmdev->rds_han.rx_queue);
 
 	return ret;
