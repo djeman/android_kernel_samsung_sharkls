@@ -428,7 +428,7 @@ static u64 __of_translate_address(struct device_node *dev,
 	int na, ns, pna, pns;
 	u64 result = OF_BAD_ADDR;
 
-	pr_debug("OF: ** translation for device %s **\n", of_node_full_name(dev));
+	pr_debug("OF: ** translation for device %s **\n", dev->full_name);
 
 	/* Increase refcount at current level */
 	of_node_get(dev);
@@ -443,13 +443,13 @@ static u64 __of_translate_address(struct device_node *dev,
 	bus->count_cells(dev, &na, &ns);
 	if (!OF_CHECK_COUNTS(na, ns)) {
 		printk(KERN_ERR "prom_parse: Bad cell count for %s\n",
-		       of_node_full_name(dev));
+		       dev->full_name);
 		goto bail;
 	}
 	memcpy(addr, in_addr, na * 4);
 
 	pr_debug("OF: bus is %s (na=%d, ns=%d) on %s\n",
-	    bus->name, na, ns, of_node_full_name(parent));
+	    bus->name, na, ns, parent->full_name);
 	of_dump_addr("OF: translating address:", addr, na);
 
 	/* Translate */
@@ -629,10 +629,10 @@ struct device_node *of_find_matching_node_by_address(struct device_node *from,
 	struct resource res;
 
 	while (dn) {
-		if (!of_address_to_resource(dn, 0, &res) &&
-		    res.start == base_address)
+		if (of_address_to_resource(dn, 0, &res))
+			continue;
+		if (res.start == base_address)
 			return dn;
-
 		dn = of_find_matching_node(dn, matches);
 	}
 
