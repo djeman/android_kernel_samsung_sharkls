@@ -47,6 +47,7 @@ do {									\
 
 static int alarm_opened;
 static DEFINE_SPINLOCK(alarm_slock);
+static DEFINE_MUTEX(alarm_mutex);
 static struct wakeup_source alarm_wake_lock;
 static DECLARE_WAIT_QUEUE_HEAD(alarm_wait_queue);
 static DECLARE_WAIT_QUEUE_HEAD(alarm_wait_change_queue);
@@ -105,6 +106,7 @@ static void alarm_clear(enum android_alarm_type alarm_type)
 	uint32_t alarm_type_mask = 1U << alarm_type;
 	unsigned long flags;
 
+	mutex_lock(&alarm_mutex);
 	spin_lock_irqsave(&alarm_slock, flags);
 	alarm_dbg(IO, "alarm %d clear\n", alarm_type);
 	devalarm_try_to_cancel(&alarms[alarm_type]);
@@ -115,7 +117,7 @@ static void alarm_clear(enum android_alarm_type alarm_type)
 	}
 	alarm_enabled &= ~alarm_type_mask;
 	spin_unlock_irqrestore(&alarm_slock, flags);
-
+	mutex_unlock(&alarm_mutex);
 }
 
 static void alarm_set(enum android_alarm_type alarm_type,
@@ -124,12 +126,14 @@ static void alarm_set(enum android_alarm_type alarm_type,
 	uint32_t alarm_type_mask = 1U << alarm_type;
 	unsigned long flags;
 
+	mutex_lock(&alarm_mutex);
 	spin_lock_irqsave(&alarm_slock, flags);
 	alarm_dbg(IO, "alarm %d set %ld.%09ld\n",
 			alarm_type, ts->tv_sec, ts->tv_nsec);
 	alarm_enabled |= alarm_type_mask;
 	devalarm_start(&alarms[alarm_type], timespec_to_ktime(*ts));
 	spin_unlock_irqrestore(&alarm_slock, flags);
+	mutex_unlock(&alarm_mutex);
 }
 
 static int alarm_wait(void)
