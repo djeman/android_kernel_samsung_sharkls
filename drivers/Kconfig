@@ -180,7 +180,5 @@ source "drivers/autotst/Kconfig"
 
 source "drivers/gator/Kconfig"
 
-source "drivers/android/Kconfig"
-
 source "drivers/cpuhotplug/Kconfig"
 endmenu
